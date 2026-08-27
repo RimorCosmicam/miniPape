@@ -1,5 +1,6 @@
 import AppKit
 import AVKit
+import CoreImage
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -176,42 +177,79 @@ struct EditorView: View {
     }
 
     private var filterInspector: some View {
-        VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Filter Stack").font(.headline)
-                    Text("Effects run from top to bottom.").font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Menu("Add Filter", systemImage: "plus") {
-                    ForEach(ThemeFilter.allCases) { filter in
-                        Button(filter.label, systemImage: filter.symbol) { model.addFilter(filter) }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                if !model.recipe.filters.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Active Stack").font(.headline)
+                        Text("Effects run from top to bottom.").font(.caption).foregroundStyle(.secondary)
                     }
-                }
-                .labelStyle(.iconOnly)
-                .menuStyle(.button)
-                .buttonStyle(.glass)
-            }
-            .padding(14)
-            Divider()
+                    .padding(.bottom, 2)
 
-            if model.recipe.filters.isEmpty {
-                ContentUnavailableView(
-                    "Clean",
-                    systemImage: "camera.filters",
-                    description: Text("Add any miniMate filter. Stack order changes the result.")
-                )
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(Array(model.recipe.filters.enumerated()), id: \.offset) { index, filter in
-                            filterRow(filter, at: index)
-                        }
+                    ForEach(Array(model.recipe.filters.enumerated()), id: \.offset) { index, filter in
+                        filterRow(filter, at: index)
                     }
-                    .padding(12)
+
+                    Divider().padding(.vertical, 5)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Effects").font(.headline)
+                    Text("Select several to build a stack.").font(.caption).foregroundStyle(.secondary)
+                }
+                .padding(.bottom, 2)
+
+                ForEach(ThemeFilter.allCases) { filter in
+                    filterToggleCard(filter)
                 }
             }
+            .padding(12)
         }
+    }
+
+    private func filterToggleCard(_ filter: ThemeFilter) -> some View {
+        let selected = model.recipe.filters.contains(filter)
+        return Button {
+            model.toggleFilter(filter)
+        } label: {
+            ZStack(alignment: .bottomLeading) {
+                FilterLivePreview(source: model.filterPreviewSource, filter: filter)
+
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.82)],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
+
+                HStack(alignment: .bottom, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(filter.label)
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                        Text(filter.description)
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.78))
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 6)
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        .font(.title2)
+                        .foregroundStyle(selected ? Color.accentColor : .white.opacity(0.8))
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .padding(12)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 132)
+            .clipShape(.rect(cornerRadius: 16))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(selected ? Color.accentColor : .white.opacity(0.12), lineWidth: selected ? 3 : 1)
+            }
+            .contentShape(.rect(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(filter.label), \(selected ? "selected" : "not selected")")
     }
 
     private func filterRow(_ filter: ThemeFilter, at index: Int) -> some View {
@@ -288,6 +326,34 @@ private struct PlayerSurface: NSViewRepresentable {
         return view
     }
     func updateNSView(_ view: AVPlayerView, context: Context) { view.player = player }
+}
+
+private struct FilterLivePreview: View {
+    let source: CIImage?
+    let filter: ThemeFilter
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.16)) { timeline in
+            if let source {
+                Image(nsImage: FilterPipeline.render(
+                    source,
+                    filters: [filter],
+                    time: timeline.date.timeIntervalSinceReferenceDate
+                ))
+                .resizable()
+                .scaledToFill()
+            } else {
+                ZStack {
+                    Color.black.opacity(0.72)
+                    Image(systemName: filter.symbol)
+                        .font(.system(size: 34))
+                        .foregroundStyle(.white.opacity(0.45))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
 }
 
 private struct GuideOverlay: View {

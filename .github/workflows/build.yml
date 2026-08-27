@@ -26,9 +26,10 @@ jobs:
         run: |
           set -euo pipefail
           app="$RUNNER_TEMP/miniPape.app"
-          mkdir -p "$app/Contents/MacOS"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
           install -m 755 .build/release/miniPapeMac "$app/Contents/MacOS/miniPape"
           cp macOS/Packaging/Info.plist "$app/Contents/Info.plist"
+          cp macOS/Packaging/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
           codesign --force --deep --sign - "$app"
           ditto -c -k --keepParent "$app" "$RUNNER_TEMP/miniPape-macOS.zip"
       - uses: actions/upload-artifact@v6

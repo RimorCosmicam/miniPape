@@ -10,7 +10,18 @@ enum FilterPipeline {
 
     static func renderImage(at url: URL, filters: [ThemeFilter]) -> NSImage? {
         guard let source = CIImage(contentsOf: url) else { return NSImage(contentsOf: url) }
-        let output = apply(filters, to: source)
+        return render(source, filters: filters)
+    }
+
+    static func previewSource(from source: CIImage, maximumDimension: CGFloat = 480) -> CIImage {
+        let longestEdge = max(source.extent.width, source.extent.height)
+        guard longestEdge > maximumDimension else { return source }
+        let scale = maximumDimension / longestEdge
+        return source.transformed(by: .init(scaleX: scale, y: scale))
+    }
+
+    static func render(_ source: CIImage, filters: [ThemeFilter], time: Double = 0) -> NSImage {
+        let output = apply(filters, to: source, time: time)
         let representation = NSCIImageRep(ciImage: output)
         let image = NSImage(size: representation.size)
         image.addRepresentation(representation)

@@ -11,6 +11,7 @@ final class EditorModel {
     var mediaKind: MediaKind?
     var recipe = CropRecipe()
     var player: AVPlayer?
+    private(set) var filterPreviewSource: CIImage?
     var isPlaying = false
     var errorMessage: String?
     let phone = PhoneClient()
@@ -25,12 +26,17 @@ final class EditorModel {
             player = AVPlayer(playerItem: item)
             player?.isMuted = recipe.muted
             rebuildVideoComposition()
+            prepareVideoFilterPreview(url)
         } else if ["gif", "apng"].contains(extensionName) {
             mediaKind = .animatedImage
             player = nil
         } else {
             mediaKind = .image
             player = nil
+            filterPreviewSource = CIImage(contentsOf: url).map { FilterPipeline.previewSource(from: $0) }
+        }
+        if mediaKind == .animatedImage {
+            filterPreviewSource = CIImage(contentsOf: url).map { FilterPipeline.previewSource(from: $0) }
         }
     }
 
@@ -41,6 +47,15 @@ final class EditorModel {
 
     func addFilter(_ filter: ThemeFilter) {
         recipe.filters.append(filter)
+        filtersDidChange()
+    }
+
+    func toggleFilter(_ filter: ThemeFilter) {
+        if recipe.filters.contains(filter) {
+            recipe.filters.removeAll { $0 == filter }
+        } else {
+            recipe.filters.append(filter)
+        }
         filtersDidChange()
     }
 
@@ -60,6 +75,18 @@ final class EditorModel {
     private func filtersDidChange() {
         rebuildVideoComposition()
         pushPreviewState()
+    }
+
+    private func prepareVideoFilterPreview(_ url: URL) {
+        filterPreviewSource = nil
+        Task {
+            let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+            generator.appliesPreferredTrackTransform = true
+            let time = CMTime(seconds: 0.2, preferredTimescale: 600)
+            if let frame = try? generator.copyCGImage(at: time, actualTime: nil) {
+                filterPreviewSource = FilterPipeline.previewSource(from: CIImage(cgImage: frame))
+            }
+        }
     }
 
     private func rebuildVideoComposition() {
