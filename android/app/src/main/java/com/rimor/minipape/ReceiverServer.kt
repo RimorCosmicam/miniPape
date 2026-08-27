@@ -85,6 +85,13 @@ class ReceiverServer(
                         rotation = crop.optDouble("rotation", 0.0).toFloat(),
                         muted = crop.optBoolean("muted", true),
                         loop = crop.optBoolean("loop", true),
+                        filters = crop.optJSONArray("filters")?.let { values ->
+                            buildList {
+                                repeat(values.length()) { index ->
+                                    runCatching { ThemeFilter.valueOf(values.getString(index)) }.getOrNull()?.let(::add)
+                                }
+                            }
+                        }.orEmpty(),
                     ),
                     json.optDouble("playhead", 0.0),
                     json.optBoolean("playing", true),

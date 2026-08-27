@@ -1,6 +1,6 @@
 package com.rimor.minipape
 
-import android.view.ViewGroup
+import android.view.TextureView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,8 +17,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
+import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
 
 @Composable
 fun WallpaperSurface(session: PreviewSession, modifier: Modifier = Modifier) {
@@ -31,15 +31,17 @@ fun WallpaperSurface(session: PreviewSession, modifier: Modifier = Modifier) {
     }
     Box(modifier.background(Color.Black)) {
         val source = session.source ?: return@Box
-        if (session.mediaKind == "video") {
-            VideoSurface(source.toUri(), session, Modifier.fillMaxSize().then(transform))
-        } else {
-            coil3.compose.AsyncImage(
-                model = source,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize().then(transform),
-                contentScale = ContentScale.Crop,
-            )
+        ThemeFilterStack(session.recipe.filters, Modifier.fillMaxSize()) {
+            if (session.mediaKind == "video") {
+                VideoSurface(source.toUri(), session, Modifier.fillMaxSize().then(transform))
+            } else {
+                coil3.compose.AsyncImage(
+                    model = source,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().then(transform),
+                    contentScale = ContentScale.Crop,
+                )
+            }
         }
     }
 }
@@ -50,6 +52,7 @@ private fun VideoSurface(uri: android.net.Uri, session: PreviewSession, modifier
     val player = remember(uri) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(uri))
+            videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
             repeatMode = if (session.recipe.loop) ExoPlayer.REPEAT_MODE_ALL else ExoPlayer.REPEAT_MODE_OFF
             volume = if (session.recipe.muted) 0f else 1f
             prepare()
@@ -63,15 +66,9 @@ private fun VideoSurface(uri: android.net.Uri, session: PreviewSession, modifier
     }
     AndroidView(
         factory = {
-            PlayerView(it).apply {
-                this.player = player
-                useController = false
-                resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            }
+            TextureView(it).also(player::setVideoTextureView)
         },
         modifier = modifier,
     )
     DisposableEffect(player) { onDispose { player.release() } }
 }
-

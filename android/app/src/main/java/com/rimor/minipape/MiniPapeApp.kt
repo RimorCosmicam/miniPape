@@ -15,8 +15,10 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFloatingActionButton
@@ -139,6 +142,7 @@ private fun CreateScreen(viewModel: MiniPapeViewModel) {
     var scale by remember { mutableFloatStateOf(1f) }
     var horizontal by remember { mutableFloatStateOf(0f) }
     var vertical by remember { mutableFloatStateOf(0f) }
+    var filters by remember { mutableStateOf<List<ThemeFilter>>(emptyList()) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { selected = it }
 
     Column(
@@ -160,17 +164,19 @@ private fun CreateScreen(viewModel: MiniPapeViewModel) {
                     }
                 }
             } else {
-                coil3.compose.AsyncImage(
-                    model = selected,
-                    contentDescription = "Crop preview",
-                    modifier = Modifier.fillMaxSize().graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        translationX = horizontal * size.width * 0.5f
-                        translationY = vertical * size.height * 0.5f
-                    },
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                )
+                ThemeFilterStack(filters, Modifier.fillMaxSize()) {
+                    coil3.compose.AsyncImage(
+                        model = selected,
+                        contentDescription = "Crop preview",
+                        modifier = Modifier.fillMaxSize().graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            translationX = horizontal * size.width * 0.5f
+                            translationY = vertical * size.height * 0.5f
+                        },
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    )
+                }
             }
         }
         Text("Scale")
@@ -180,13 +186,28 @@ private fun CreateScreen(viewModel: MiniPapeViewModel) {
             Slider(value = horizontal, onValueChange = { horizontal = it }, valueRange = -1f..1f, modifier = Modifier.weight(1f))
             Slider(value = vertical, onValueChange = { vertical = it }, valueRange = -1f..1f, modifier = Modifier.weight(1f))
         }
+        Text("Filters · stack in selection order")
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ThemeFilter.entries.forEach { filter ->
+                FilterChip(
+                    selected = filter in filters,
+                    onClick = {
+                        filters = if (filter in filters) filters - filter else filters + filter
+                    },
+                    label = { Text(filter.label) },
+                )
+            }
+        }
         FilledTonalButton(
             onClick = {
                 selected?.let {
                     viewModel.importFromPhone(
                         context,
                         it,
-                        CropRecipe(scale = scale, offsetX = horizontal, offsetY = vertical),
+                        CropRecipe(scale = scale, offsetX = horizontal, offsetY = vertical, filters = filters),
                     )
                 }
             },

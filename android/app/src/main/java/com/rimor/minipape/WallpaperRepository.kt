@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import org.json.JSONObject
+import org.json.JSONArray
 
 class WallpaperRepository(context: Context) {
     private val wallpaperDirectory = File(context.filesDir, "wallpapers").apply { mkdirs() }
@@ -65,6 +66,13 @@ fun JSONObject.toCropRecipe(): CropRecipe = CropRecipe(
     rotation = optDouble("rotation", 0.0).toFloat(),
     muted = optBoolean("muted", true),
     loop = optBoolean("loop", true),
+    filters = optJSONArray("filters")?.let { values ->
+        buildList {
+            repeat(values.length()) { index ->
+                runCatching { ThemeFilter.valueOf(values.getString(index)) }.getOrNull()?.let(::add)
+            }
+        }
+    }.orEmpty(),
 )
 
 private fun CropRecipe.toJson(): JSONObject = JSONObject()
@@ -74,5 +82,6 @@ private fun CropRecipe.toJson(): JSONObject = JSONObject()
     .put("rotation", rotation)
     .put("muted", muted)
     .put("loop", loop)
+    .put("filters", JSONArray(filters.map(ThemeFilter::name)))
 
 private fun String.safeExtension(): String = lowercase().filter(Char::isLetterOrDigit).take(8).ifBlank { "bin" }

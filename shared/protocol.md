@@ -16,11 +16,11 @@ Uploads the source once for a transient preview session.
 
 ### `PUT /v1/preview/state`
 
-Updates crop, scale, rotation, playback position, mute, and loop state as compact JSON. The phone applies the recipe locally so live editing does not repeatedly resend video frames.
+Updates crop, scale, rotation, playback position, mute, loop state, and an ordered `filters` array as compact JSON. Filter identifiers use miniMate's uppercase enum names; duplicates and order are preserved. The phone applies the recipe locally so live editing does not repeatedly resend video frames.
 
 ### `POST /v1/wallpapers`
 
-Stores a completed asset. Headers carry UTF-8 name, media type, crop rectangle, mute state, and loop mode. The body is the encoded image, GIF, or video.
+Stores a completed asset. Headers carry UTF-8 name, media type, and a Base64-encoded non-destructive recipe containing crop, playback, and filter-stack state. The body is the encoded image, GIF, or video.
 
 ## Security
 

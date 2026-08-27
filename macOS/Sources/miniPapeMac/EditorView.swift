@@ -3,39 +3,37 @@ import AVKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+private enum InspectorPage: String, CaseIterable, Identifiable {
+    case crop = "Crop"
+    case filters = "Filters"
+    case phone = "Phone"
+    var id: String { rawValue }
+}
+
 struct EditorView: View {
     @Bindable var model: EditorModel
     @State private var importing = false
+    @State private var inspectorPresented = true
+    @State private var inspectorPage = InspectorPage.crop
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                Section("Project") {
-                    Label("Canvas", systemImage: "rectangle.on.rectangle")
-                    Label("Phone", systemImage: "iphone.gen3")
-                }
-            }
-            .navigationTitle("miniPape")
-            .navigationSplitViewColumnWidth(min: 170, ideal: 190)
-        } content: {
-            VStack(spacing: 0) {
-                canvas
-                Divider()
-                transport
-                    .padding(14)
-            }
-            .navigationTitle(model.mediaURL?.deletingPathExtension().lastPathComponent ?? "Untitled")
-        } detail: {
-            inspector
-                .navigationTitle("Inspector")
+        ZStack(alignment: .bottom) {
+            stage
+            transport.padding(.horizontal, 24).padding(.bottom, 20)
+        }
+        .navigationTitle(model.mediaURL?.deletingPathExtension().lastPathComponent ?? "miniPape")
+        .inspector(isPresented: $inspectorPresented) {
+            inspector.inspectorColumnWidth(min: 280, ideal: 320, max: 380)
         }
         .toolbar {
-            ToolbarItemGroup {
+            ToolbarItemGroup(placement: .primaryAction) {
                 Button("Open", systemImage: "plus") { importing = true }
                 Button("Preview on Phone", systemImage: "iphone.and.arrow.forward") { model.beginPhonePreview() }
                     .disabled(model.mediaURL == nil || model.phone.status == nil)
                 Button("Send", systemImage: "paperplane.fill") { model.sendWallpaper() }
                     .disabled(model.mediaURL == nil || model.phone.status == nil)
+                Divider()
+                Button("Inspector", systemImage: "sidebar.right") { inspectorPresented.toggle() }
             }
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.image, .movie], allowsMultipleSelection: false) { result in
@@ -51,12 +49,37 @@ struct EditorView: View {
         }
     }
 
+    private var stage: some View {
+        GeometryReader { proxy in
+            let horizontalInset: CGFloat = proxy.size.width < 900 ? 12 : 22
+            let topInset: CGFloat = 16
+            let bottomInset: CGFloat = 82
+            let availableWidth = max(1, proxy.size.width - horizontalInset * 2)
+            let availableHeight = max(1, proxy.size.height - topInset - bottomInset)
+            let canvasWidth = min(availableWidth, availableHeight * FlipCanvas.zFlip7.aspectRatio)
+            let canvasHeight = canvasWidth / FlipCanvas.zFlip7.aspectRatio
+
+            ZStack {
+                Color(nsColor: .windowBackgroundColor)
+                canvas
+                    .frame(width: canvasWidth, height: canvasHeight)
+                    .clipShape(.rect(cornerRadius: 24))
+                    .shadow(color: .black.opacity(0.24), radius: 24, y: 10)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 24)
+                            .stroke(.white.opacity(0.12), lineWidth: 1)
+                    }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
     private var canvas: some View {
         GeometryReader { proxy in
             ZStack {
                 Color.black
-                if let url = model.mediaURL {
-                    media(url)
+                if model.mediaURL != nil {
+                    media
                         .scaleEffect(model.recipe.scale)
                         .rotationEffect(.degrees(model.recipe.rotation))
                         .offset(
@@ -67,35 +90,28 @@ struct EditorView: View {
                     ContentUnavailableView(
                         "Open a video, GIF, or image",
                         systemImage: "photo.badge.plus",
-                        description: Text("The crop canvas matches the Z Flip 7 cover screen.")
+                        description: Text("Designed at the Z Flip 7 cover-screen ratio.")
                     )
                     .foregroundStyle(.white)
                 }
                 GuideOverlay()
             }
-            .aspectRatio(FlipCanvas.zFlip7.aspectRatio, contentMode: .fit)
-            .clipShape(.rect(cornerRadius: 28))
-            .shadow(color: .black.opacity(0.28), radius: 28, y: 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(34)
+            .clipped()
         }
     }
 
     @ViewBuilder
-    private func media(_ url: URL) -> some View {
+    private var media: some View {
         if model.mediaKind == .video, let player = model.player {
-            VideoPlayer(player: player)
-                .aspectRatio(contentMode: .fill)
-        } else if let image = NSImage(contentsOf: url) {
-            Image(nsImage: image)
-                .resizable()
-                .scaledToFill()
+            PlayerSurface(player: player)
+        } else if let image = model.filteredImage {
+            Image(nsImage: image).resizable().scaledToFill()
         }
     }
 
     private var transport: some View {
-        GlassEffectContainer(spacing: 12) {
-            HStack(spacing: 12) {
+        GlassEffectContainer(spacing: 10) {
+            HStack(spacing: 10) {
                 Button(model.isPlaying ? "Pause" : "Play", systemImage: model.isPlaying ? "pause.fill" : "play.fill") {
                     model.togglePlayback()
                 }
@@ -103,40 +119,133 @@ struct EditorView: View {
                 .buttonStyle(.glass)
                 .disabled(model.player == nil)
 
-                Text("1048 × 948")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Z Flip 7 Cover").font(.caption.weight(.medium))
+                    Text("1048 × 948").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                }
 
-                Spacer()
+                if !model.recipe.filters.isEmpty {
+                    Divider().frame(height: 22)
+                    Label("\(model.recipe.filters.count)", systemImage: "camera.filters")
+                        .font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                }
 
-                Text(model.phone.message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Spacer(minLength: 20)
+                Text(model.phone.message).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .frame(maxWidth: 560)
+            .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var inspector: some View {
+        VStack(spacing: 0) {
+            Picker("Inspector", selection: $inspectorPage) {
+                ForEach(InspectorPage.allCases) { page in Text(page.rawValue).tag(page) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(14)
+            Divider()
+            switch inspectorPage {
+            case .crop: cropInspector
+            case .filters: filterInspector
+            case .phone: phoneInspector
             }
         }
     }
 
-    private var inspector: some View {
+    private var cropInspector: some View {
         Form {
-            Section("Crop") {
-                cropSlider("Scale", value: $model.recipe.scale, range: 1...4)
-                cropSlider("Horizontal", value: $model.recipe.offsetX, range: -1...1)
-                cropSlider("Vertical", value: $model.recipe.offsetY, range: -1...1)
-                cropSlider("Rotation", value: $model.recipe.rotation, range: -15...15)
+            Section("Composition") {
+                cropSlider("Scale", value: $model.recipe.scale, range: 1...4, valueLabel: model.recipe.scale.formatted(.number.precision(.fractionLength(2))))
+                cropSlider("Horizontal", value: $model.recipe.offsetX, range: -1...1, valueLabel: model.recipe.offsetX.formatted(.number.precision(.fractionLength(2))))
+                cropSlider("Vertical", value: $model.recipe.offsetY, range: -1...1, valueLabel: model.recipe.offsetY.formatted(.number.precision(.fractionLength(2))))
+                cropSlider("Rotation", value: $model.recipe.rotation, range: -15...15, valueLabel: "\(model.recipe.rotation.formatted(.number.precision(.fractionLength(1))))°")
+            }
+            Section("Playback") {
                 Toggle("Loop", isOn: $model.recipe.loop)
                 Toggle("Mute", isOn: $model.recipe.muted)
+                    .onChange(of: model.recipe.muted) { _, muted in model.player?.isMuted = muted }
             }
+        }
+        .formStyle(.grouped)
+    }
 
-            Section("Phone") {
+    private var filterInspector: some View {
+        VStack(spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Filter Stack").font(.headline)
+                    Text("Effects run from top to bottom.").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Menu("Add Filter", systemImage: "plus") {
+                    ForEach(ThemeFilter.allCases) { filter in
+                        Button(filter.label, systemImage: filter.symbol) { model.addFilter(filter) }
+                    }
+                }
+                .labelStyle(.iconOnly)
+                .menuStyle(.button)
+                .buttonStyle(.glass)
+            }
+            .padding(14)
+            Divider()
+
+            if model.recipe.filters.isEmpty {
+                ContentUnavailableView(
+                    "Clean",
+                    systemImage: "camera.filters",
+                    description: Text("Add any miniMate filter. Stack order changes the result.")
+                )
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(Array(model.recipe.filters.enumerated()), id: \.offset) { index, filter in
+                            filterRow(filter, at: index)
+                        }
+                    }
+                    .padding(12)
+                }
+            }
+        }
+    }
+
+    private func filterRow(_ filter: ThemeFilter, at index: Int) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: filter.symbol).frame(width: 22).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(filter.label).font(.callout.weight(.medium))
+                Text(filter.description).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Spacer(minLength: 4)
+            ControlGroup {
+                Button("Move Up", systemImage: "chevron.up") { model.moveFilter(from: index, by: -1) }
+                    .disabled(index == 0)
+                Button("Move Down", systemImage: "chevron.down") { model.moveFilter(from: index, by: 1) }
+                    .disabled(index == model.recipe.filters.count - 1)
+                Button("Remove", systemImage: "xmark") { model.removeFilter(at: index) }
+            }
+            .labelStyle(.iconOnly)
+            .controlSize(.small)
+        }
+        .padding(10)
+        .background(.quaternary.opacity(0.45), in: .rect(cornerRadius: 12))
+    }
+
+    private var phoneInspector: some View {
+        Form {
+            Section("Receiver") {
                 TextField("Phone address", text: Binding(
-                    get: { model.phone.address },
-                    set: { model.phone.address = $0 }
+                    get: { model.phone.address }, set: { model.phone.address = $0 }
                 ), prompt: Text("192.168.1.20"))
                 TextField("Pair code", text: Binding(
-                    get: { model.phone.pairCode },
-                    set: { model.phone.pairCode = $0 }
+                    get: { model.phone.pairCode }, set: { model.phone.pairCode = $0 }
                 ), prompt: Text("000000"))
-                Button("Connect") {
+                Button("Connect", systemImage: "antenna.radiowaves.left.and.right") {
                     Task {
                         do { try await model.phone.connect() }
                         catch { model.errorMessage = error.localizedDescription }
@@ -147,13 +256,21 @@ struct EditorView: View {
                     LabeledContent("Device", value: status.deviceModel)
                 }
             }
+            Section {
+                Text("Live preview sends crop, playback, and the complete ordered filter stack without flattening the source.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
-        .frame(minWidth: 285, idealWidth: 310)
     }
 
-    private func cropSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
-        LabeledContent(title) {
+    private func cropSlider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, valueLabel: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text(valueLabel).foregroundStyle(.secondary).monospacedDigit()
+            }
             Slider(value: value, in: range, onEditingChanged: { editing in
                 if !editing { model.pushPreviewState() }
             })
@@ -161,24 +278,30 @@ struct EditorView: View {
     }
 }
 
+private struct PlayerSurface: NSViewRepresentable {
+    let player: AVPlayer
+    func makeNSView(context: Context) -> AVPlayerView {
+        let view = AVPlayerView()
+        view.controlsStyle = .none
+        view.videoGravity = .resizeAspectFill
+        view.player = player
+        return view
+    }
+    func updateNSView(_ view: AVPlayerView, context: Context) { view.player = player }
+}
+
 private struct GuideOverlay: View {
     var body: some View {
         ZStack {
-            Rectangle()
-                .stroke(.white.opacity(0.18), lineWidth: 1)
-                .padding(20)
+            RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.16), lineWidth: 1).padding(18)
             HStack(spacing: 0) {
-                Spacer()
-                Rectangle().fill(.white.opacity(0.1)).frame(width: 1)
-                Spacer()
-                Rectangle().fill(.white.opacity(0.1)).frame(width: 1)
+                Spacer(); Rectangle().fill(.white.opacity(0.09)).frame(width: 1)
+                Spacer(); Rectangle().fill(.white.opacity(0.09)).frame(width: 1)
                 Spacer()
             }
             VStack(spacing: 0) {
-                Spacer()
-                Rectangle().fill(.white.opacity(0.1)).frame(height: 1)
-                Spacer()
-                Rectangle().fill(.white.opacity(0.1)).frame(height: 1)
+                Spacer(); Rectangle().fill(.white.opacity(0.09)).frame(height: 1)
+                Spacer(); Rectangle().fill(.white.opacity(0.09)).frame(height: 1)
                 Spacer()
             }
         }

@@ -1,4 +1,6 @@
 import AVFoundation
+import AppKit
+import CoreImage
 import Foundation
 import Observation
 
@@ -14,12 +16,15 @@ final class EditorModel {
     let phone = PhoneClient()
 
     func open(_ url: URL) {
+        recipe = CropRecipe()
         mediaURL = url
         let extensionName = url.pathExtension.lowercased()
         if ["mp4", "mov", "m4v", "webm"].contains(extensionName) {
             mediaKind = .video
-            player = AVPlayer(url: url)
+            let item = AVPlayerItem(url: url)
+            player = AVPlayer(playerItem: item)
             player?.isMuted = recipe.muted
+            rebuildVideoComposition()
         } else if ["gif", "apng"].contains(extensionName) {
             mediaKind = .animatedImage
             player = nil
@@ -27,7 +32,49 @@ final class EditorModel {
             mediaKind = .image
             player = nil
         }
-        recipe = CropRecipe()
+    }
+
+    var filteredImage: NSImage? {
+        guard let mediaURL else { return nil }
+        return FilterPipeline.renderImage(at: mediaURL, filters: recipe.filters)
+    }
+
+    func addFilter(_ filter: ThemeFilter) {
+        recipe.filters.append(filter)
+        filtersDidChange()
+    }
+
+    func removeFilter(at index: Int) {
+        guard recipe.filters.indices.contains(index) else { return }
+        recipe.filters.remove(at: index)
+        filtersDidChange()
+    }
+
+    func moveFilter(from index: Int, by distance: Int) {
+        let destination = index + distance
+        guard recipe.filters.indices.contains(index), recipe.filters.indices.contains(destination) else { return }
+        recipe.filters.swapAt(index, destination)
+        filtersDidChange()
+    }
+
+    private func filtersDidChange() {
+        rebuildVideoComposition()
+        pushPreviewState()
+    }
+
+    private func rebuildVideoComposition() {
+        guard mediaKind == .video, let item = player?.currentItem else { return }
+        let filters = recipe.filters
+        guard !filters.isEmpty else {
+            item.videoComposition = nil
+            return
+        }
+        item.videoComposition = AVVideoComposition(asset: item.asset) { request in
+            let seconds = request.compositionTime.seconds
+            let output = FilterPipeline.apply(filters, to: request.sourceImage.clampedToExtent(), time: seconds)
+                .cropped(to: request.sourceImage.extent)
+            request.finish(with: output, context: nil)
+        }
     }
 
     func togglePlayback() {
@@ -71,4 +118,3 @@ final class EditorModel {
         return PreviewState(recipe: recipe, playhead: seconds.isFinite ? seconds : 0, playing: isPlaying, canvas: .zFlip7)
     }
 }
-

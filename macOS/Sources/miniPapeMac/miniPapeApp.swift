@@ -7,10 +7,9 @@ struct MiniPapeApp: App {
     var body: some Scene {
         WindowGroup("miniPape") {
             EditorView(model: model)
-                .frame(minWidth: 980, minHeight: 680)
+                .frame(minWidth: 860, minHeight: 620)
         }
-        .defaultSize(width: 1180, height: 780)
+        .defaultSize(width: 1280, height: 820)
         .windowResizability(.contentMinSize)
     }
 }
-

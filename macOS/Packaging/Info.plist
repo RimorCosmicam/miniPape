@@ -6,8 +6,8 @@
     <key>CFBundleIdentifier</key><string>com.rimor.minipape.mac</string>
     <key>CFBundleName</key><string>miniPape</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
-    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleShortVersionString</key><string>0.2.0</string>
+    <key>CFBundleVersion</key><string>2</string>
     <key>LSMinimumSystemVersion</key><string>27.0</string>
     <key>NSAppTransportSecurity</key>
     <dict><key>NSAllowsLocalNetworking</key><true/></dict>
@@ -15,4 +15,3 @@
     <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict>
 </plist>
-
