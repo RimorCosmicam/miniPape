@@ -128,8 +128,14 @@ struct EditorView: View {
             }
 
             Section("Phone") {
-                TextField("Phone address", text: $model.phone.address, prompt: Text("192.168.1.20"))
-                TextField("Pair code", text: $model.phone.pairCode, prompt: Text("000000"))
+                TextField("Phone address", text: Binding(
+                    get: { model.phone.address },
+                    set: { model.phone.address = $0 }
+                ), prompt: Text("192.168.1.20"))
+                TextField("Pair code", text: Binding(
+                    get: { model.phone.pairCode },
+                    set: { model.phone.pairCode = $0 }
+                ), prompt: Text("000000"))
                 Button("Connect") {
                     Task {
                         do { try await model.phone.connect() }
