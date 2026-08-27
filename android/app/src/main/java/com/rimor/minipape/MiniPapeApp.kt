@@ -122,7 +122,7 @@ private fun GalleryScreen(viewModel: MiniPapeViewModel) {
             Card(shape = RoundedCornerShape(28.dp)) {
                 Column {
                     WallpaperSurface(
-                        PreviewSession(source = item.file, mediaKind = item.mediaKind),
+                        PreviewSession(source = item.file, mediaKind = item.mediaKind, recipe = item.recipe),
                         Modifier.fillMaxWidth().aspectRatio(1048f / 948f),
                     )
                     Text(item.displayName, modifier = Modifier.padding(14.dp), maxLines = 1)
@@ -181,7 +181,15 @@ private fun CreateScreen(viewModel: MiniPapeViewModel) {
             Slider(value = vertical, onValueChange = { vertical = it }, valueRange = -1f..1f, modifier = Modifier.weight(1f))
         }
         FilledTonalButton(
-            onClick = { selected?.let { viewModel.importFromPhone(context, it) } },
+            onClick = {
+                selected?.let {
+                    viewModel.importFromPhone(
+                        context,
+                        it,
+                        CropRecipe(scale = scale, offsetX = horizontal, offsetY = vertical),
+                    )
+                }
+            },
             enabled = selected != null,
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = RoundedCornerShape(20.dp),

@@ -23,5 +23,5 @@ data class WallpaperItem(
     val file: File,
     val displayName: String,
     val mediaKind: String,
+    val recipe: CropRecipe = CropRecipe(),
 )
-

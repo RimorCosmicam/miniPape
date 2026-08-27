@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
+import org.json.JSONObject
 
 class WallpaperRepository(context: Context) {
     private val wallpaperDirectory = File(context.filesDir, "wallpapers").apply { mkdirs() }
@@ -33,14 +34,22 @@ class WallpaperRepository(context: Context) {
         return File(wallpaperDirectory, clean)
     }
 
-    fun addWallpaper(file: File, kind: String) {
-        _wallpapers.value = listOf(WallpaperItem(file, file.nameWithoutExtension, kind)) + _wallpapers.value
+    fun addWallpaper(file: File, kind: String, recipe: CropRecipe = CropRecipe()) {
+        recipeFile(file).writeText(recipe.toJson().toString())
+        _wallpapers.value = listOf(WallpaperItem(file, file.nameWithoutExtension, kind, recipe)) + _wallpapers.value
     }
 
     private fun loadWallpapers(): List<WallpaperItem> = wallpaperDirectory.listFiles()
+        ?.filterNot { it.name.endsWith(".minipape.json") }
         ?.sortedByDescending(File::lastModified)
-        ?.map { WallpaperItem(it, it.nameWithoutExtension, mediaKind(it.extension)) }
+        ?.map { file ->
+            val recipe = recipeFile(file).takeIf(File::exists)?.readText()?.let { runCatching { JSONObject(it).toCropRecipe() }.getOrNull() }
+                ?: CropRecipe()
+            WallpaperItem(file, file.nameWithoutExtension, mediaKind(file.extension), recipe)
+        }
         .orEmpty()
+
+    private fun recipeFile(file: File): File = File(file.parentFile, "${file.name}.minipape.json")
 
     private fun mediaKind(extension: String): String = when (extension.lowercase()) {
         "mp4", "mov", "m4v", "webm" -> "video"
@@ -49,5 +58,21 @@ class WallpaperRepository(context: Context) {
     }
 }
 
-private fun String.safeExtension(): String = lowercase().filter(Char::isLetterOrDigit).take(8).ifBlank { "bin" }
+fun JSONObject.toCropRecipe(): CropRecipe = CropRecipe(
+    scale = optDouble("scale", 1.0).toFloat(),
+    offsetX = optDouble("offsetX", 0.0).toFloat(),
+    offsetY = optDouble("offsetY", 0.0).toFloat(),
+    rotation = optDouble("rotation", 0.0).toFloat(),
+    muted = optBoolean("muted", true),
+    loop = optBoolean("loop", true),
+)
 
+private fun CropRecipe.toJson(): JSONObject = JSONObject()
+    .put("scale", scale)
+    .put("offsetX", offsetX)
+    .put("offsetY", offsetY)
+    .put("rotation", rotation)
+    .put("muted", muted)
+    .put("loop", loop)
+
+private fun String.safeExtension(): String = lowercase().filter(Char::isLetterOrDigit).take(8).ifBlank { "bin" }

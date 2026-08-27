@@ -2,6 +2,7 @@ package com.rimor.minipape
 
 import android.content.Context
 import android.os.Build
+import android.util.Base64
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -95,7 +96,12 @@ class ReceiverServer(
                 val kind = headers["x-minipape-media-kind"] ?: "image"
                 val file = repository.wallpaperFile(name)
                 receiveFile(input, file, length)
-                repository.addWallpaper(file, kind)
+                val recipe = headers["x-minipape-crop"]?.let { encoded ->
+                    runCatching {
+                        JSONObject(Base64.decode(encoded, Base64.DEFAULT).decodeToString()).toCropRecipe()
+                    }.getOrNull()
+                } ?: CropRecipe()
+                repository.addWallpaper(file, kind, recipe)
                 respond(output, 201, "application/json", "{\"stored\":true}".toByteArray())
             }
             else -> respond(output, 404, "text/plain", "Not found".toByteArray())
@@ -162,4 +168,3 @@ class ReceiverServer(
         const val MAX_UPLOAD_BYTES = 250L * 1024L * 1024L
     }
 }
-
