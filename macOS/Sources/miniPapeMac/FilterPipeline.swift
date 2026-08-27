@@ -70,7 +70,7 @@ enum FilterPipeline {
             ])
             return filtered("CISoftLightBlendMode", softNoise, [kCIInputBackgroundImageKey: vignette])
         case .mirrorPrism:
-            return filtered("CIKaleidoscope", image, ["inputCount": 6.0, "inputCenter": center, "inputAngle": .pi / 6])
+            return filtered("CIKaleidoscope", image, ["inputCount": 6.0, "inputCenter": center, "inputAngle": Double.pi / 6])
         case .liquidGlass:
             let movingCenter = CIVector(
                 x: extent.midX + CGFloat(sin(time * 0.7)) * extent.width * 0.12,
