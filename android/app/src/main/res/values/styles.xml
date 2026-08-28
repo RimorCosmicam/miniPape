@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.MiniPape" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.MiniPape" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#B5C7FF</item>
+        <item name="android:navigationBarColor">#070A14</item>
+        <item name="android:statusBarColor">#070A14</item>
+        <item name="android:windowBackground">#070A14</item>
+        <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
 </resources>
-
