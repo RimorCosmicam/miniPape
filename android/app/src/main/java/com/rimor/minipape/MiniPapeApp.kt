@@ -1,6 +1,7 @@
 package com.rimor.minipape
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -224,12 +225,7 @@ private fun CreateScreen(viewModel: MiniPapeViewModel) {
         if (result.resultCode == Activity.RESULT_OK) selected = result.data?.data
     }
     val chooseMedia = {
-        val mediaIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "*/*"
-            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
-        }
-        picker.launch(Intent.createChooser(mediaIntent, "Choose wallpaper source"))
+        picker.launch(mediaSourceChooser(context))
     }
     val save: () -> Unit = {
         selected?.let {
@@ -276,6 +272,30 @@ private fun CreateScreen(viewModel: MiniPapeViewModel) {
                 onPanel = { panel = it },
                 onSave = save,
             )
+        }
+    }
+}
+
+private fun mediaSourceChooser(context: Context): Intent {
+    fun intentFor(action: String) = Intent(action).apply {
+        addCategory(Intent.CATEGORY_OPENABLE)
+        type = "*/*"
+        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
+    }
+
+    val candidates = listOf(Intent.ACTION_GET_CONTENT, Intent.ACTION_OPEN_DOCUMENT)
+        .flatMap { action ->
+            val base = intentFor(action)
+            context.packageManager.queryIntentActivities(base, 0).map { resolved ->
+                Intent(base).setClassName(resolved.activityInfo.packageName, resolved.activityInfo.name)
+            }
+        }
+        .distinctBy { it.component?.flattenToString() }
+
+    val primary = candidates.firstOrNull() ?: intentFor(Intent.ACTION_OPEN_DOCUMENT)
+    return Intent.createChooser(primary, "Choose wallpaper source").apply {
+        if (candidates.size > 1) {
+            putExtra(Intent.EXTRA_INITIAL_INTENTS, candidates.drop(1).toTypedArray())
         }
     }
 }
