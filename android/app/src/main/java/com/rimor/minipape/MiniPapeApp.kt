@@ -6,9 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -18,7 +16,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,16 +27,15 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Devices
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Tune
@@ -78,63 +74,21 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
-private enum class Destination(val label: String) {
-    Gallery("Gallery"), Create("Create"), Connect("Connect")
-}
-
 private enum class EditPanel { Crop, Filters }
 
 @Composable
 fun MiniPapeApp(viewModel: MiniPapeViewModel = viewModel()) {
-    var destination by remember { mutableStateOf(Destination.Gallery) }
+    val pager = rememberPagerState(initialPage = 0, pageCount = { 2 })
     Box(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface)
             .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
-        Column(Modifier.fillMaxSize()) {
-            CompactHeader(destination, onDestinationChange = { destination = it })
-            AnimatedContent(destination, modifier = Modifier.weight(1f), label = "destination") { screen ->
-                when (screen) {
-                    Destination.Gallery -> GalleryScreen(viewModel)
-                    Destination.Create -> CreateScreen(viewModel)
-                    Destination.Connect -> ConnectScreen(viewModel)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CompactHeader(destination: Destination, onDestinationChange: (Destination) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        ImageIcon(Modifier.size(38.dp))
-        Text(
-            "miniPape",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 3.dp),
-        )
-        Spacer(Modifier.weight(1f))
-        Destination.entries.forEach { item ->
-            val icon = when (item) {
-                Destination.Gallery -> Icons.Default.Collections
-                Destination.Create -> Icons.Default.Edit
-                Destination.Connect -> Icons.Default.Devices
-            }
-            if (destination == item) {
-                FilledIconButton(onClick = { onDestinationChange(item) }, modifier = Modifier.size(42.dp)) {
-                    Icon(icon, contentDescription = item.label)
-                }
-            } else {
-                IconButton(onClick = { onDestinationChange(item) }, modifier = Modifier.size(42.dp)) {
-                    Icon(icon, contentDescription = item.label)
-                }
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
+            when (page) {
+                0 -> GalleryScreen(viewModel)
+                else -> CreateScreen(viewModel)
             }
         }
     }
@@ -154,42 +108,45 @@ private fun ImageIcon(modifier: Modifier = Modifier) {
 private fun GalleryScreen(viewModel: MiniPapeViewModel) {
     val wallpapers by viewModel.wallpapers.collectAsStateWithLifecycle()
     val preview by viewModel.preview.collectAsStateWithLifecycle()
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val cardWidth = maxWidth - 20.dp
-        val sessions = buildList {
-            if (preview.source != null) add("Live from Mac" to preview)
-            wallpapers.forEach { item ->
-                add(item.displayName to PreviewSession(source = item.file, mediaKind = item.mediaKind, recipe = item.recipe))
-            }
+    val sessions = buildList {
+        if (preview.source != null) add("Live from Mac" to preview)
+        wallpapers.forEach { item ->
+            add(item.displayName to PreviewSession(source = item.file, mediaKind = item.mediaKind, recipe = item.recipe))
         }
-        if (sessions.isEmpty()) {
-            EmptyGallery()
-        } else {
-            LazyRow(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, bottom = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                items(sessions, key = { it.first + (it.second.source?.absolutePath ?: "live") }) { (label, session) ->
-                    Card(
-                        modifier = Modifier.width(cardWidth).fillMaxHeight(),
-                        shape = RoundedCornerShape(24.dp),
-                    ) {
-                        Box(Modifier.fillMaxSize()) {
-                            WallpaperSurface(session, Modifier.fillMaxSize())
-                            Surface(
-                                modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
-                                color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.68f),
-                                shape = RoundedCornerShape(16.dp),
-                            ) {
-                                Text(
-                                    label,
-                                    color = MaterialTheme.colorScheme.inverseOnSurface,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
-                                )
+    }
+    Column(Modifier.fillMaxSize()) {
+        PageHeading("Gallery", "Swipe to create")
+        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+            val cardHeight = maxHeight - 8.dp
+            if (sessions.isEmpty()) {
+                EmptyGallery()
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(sessions, key = { it.first + (it.second.source?.absolutePath ?: "live") }) { (label, session) ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().height(cardHeight),
+                            shape = RoundedCornerShape(26.dp),
+                        ) {
+                            Box(Modifier.fillMaxSize()) {
+                                WallpaperSurface(session, Modifier.fillMaxSize())
+                                Surface(
+                                    modifier = Modifier.align(Alignment.TopStart).padding(10.dp),
+                                    color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.66f),
+                                    shape = RoundedCornerShape(15.dp),
+                                ) {
+                                    Text(
+                                        label,
+                                        color = MaterialTheme.colorScheme.inverseOnSurface,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                    )
+                                }
                             }
                         }
                     }
@@ -200,21 +157,38 @@ private fun GalleryScreen(viewModel: MiniPapeViewModel) {
 }
 
 @Composable
+private fun PageHeading(title: String, hint: String? = null, action: (@Composable () -> Unit)? = null) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(48.dp).padding(start = 14.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.weight(1f))
+        if (hint != null) {
+            Text(hint, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        action?.invoke()
+    }
+}
+
+@Composable
 private fun EmptyGallery() {
     Column(
         modifier = Modifier.fillMaxSize().padding(18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        ImageIcon(Modifier.size(92.dp))
-        Text("Your cover wallpapers", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
-        Text("Create one here or preview from your Mac.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ImageIcon(Modifier.size(76.dp))
+        Text("No wallpapers yet", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 10.dp))
+        Text("Swipe left to create one", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
 private fun CreateScreen(viewModel: MiniPapeViewModel) {
     val context = LocalContext.current
+    val address = remember { localAddress() }
+    var pairingOpen by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<Uri?>(null) }
     var scale by remember { mutableFloatStateOf(1f) }
     var horizontal by remember { mutableFloatStateOf(0f) }
@@ -238,40 +212,43 @@ private fun CreateScreen(viewModel: MiniPapeViewModel) {
         Unit
     }
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val coverMode = maxHeight < 600.dp
-        if (coverMode) {
-            CoverEditor(
-                selected = selected,
-                scale = scale,
-                horizontal = horizontal,
-                vertical = vertical,
-                filters = filters,
-                panel = panel,
-                onChoose = chooseMedia,
-                onScale = { scale = it },
-                onHorizontal = { horizontal = it },
-                onVertical = { vertical = it },
-                onToggleFilter = { filter -> filters = if (filter in filters) filters - filter else filters + filter },
-                onPanel = { panel = it },
-                onSave = save,
+    Column(Modifier.fillMaxSize()) {
+        PageHeading("Create") {
+            FilledTonalButton(
+                onClick = { pairingOpen = !pairingOpen },
+                modifier = Modifier.height(40.dp),
+                shape = RoundedCornerShape(16.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp),
+            ) {
+                Icon(Icons.Default.Devices, contentDescription = null, Modifier.size(18.dp))
+                Text(if (pairingOpen) "Done" else "Mac", modifier = Modifier.padding(start = 7.dp))
+            }
+        }
+        if (pairingOpen) {
+            ConnectionDetails(
+                address,
+                viewModel.pairCode,
+                Modifier.fillMaxWidth().weight(1f).padding(horizontal = 8.dp, vertical = 6.dp),
             )
         } else {
-            TallEditor(
-                selected = selected,
-                scale = scale,
-                horizontal = horizontal,
-                vertical = vertical,
-                filters = filters,
-                panel = panel,
-                onChoose = chooseMedia,
-                onScale = { scale = it },
-                onHorizontal = { horizontal = it },
-                onVertical = { vertical = it },
-                onToggleFilter = { filter -> filters = if (filter in filters) filters - filter else filters + filter },
-                onPanel = { panel = it },
-                onSave = save,
-            )
+            BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+                val coverMode = maxHeight < 600.dp
+                if (coverMode) {
+                    CoverEditor(
+                        selected, scale, horizontal, vertical, filters, panel, chooseMedia,
+                        { scale = it }, { horizontal = it }, { vertical = it },
+                        { filter -> filters = if (filter in filters) filters - filter else filters + filter },
+                        { panel = it }, save,
+                    )
+                } else {
+                    TallEditor(
+                        selected, scale, horizontal, vertical, filters, panel, chooseMedia,
+                        { scale = it }, { horizontal = it }, { vertical = it },
+                        { filter -> filters = if (filter in filters) filters - filter else filters + filter },
+                        { panel = it }, save,
+                    )
+                }
+            }
         }
     }
 }
@@ -528,31 +505,6 @@ private fun CompactSlider(label: String, value: Float, range: ClosedFloatingPoin
             Text(String.format("%.2f", value), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Slider(value = value, onValueChange = onValue, valueRange = range, modifier = Modifier.fillMaxWidth().height(34.dp))
-    }
-}
-
-@Composable
-private fun ConnectScreen(viewModel: MiniPapeViewModel) {
-    val address = remember { localAddress() }
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val coverMode = maxHeight < 600.dp
-        if (coverMode) {
-            ConnectionDetails(
-                address,
-                viewModel.pairCode,
-                Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 8.dp),
-            )
-        } else {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                ImageIcon(Modifier.size(104.dp))
-                Text("Preview from your Mac", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                ConnectionDetails(address, viewModel.pairCode, Modifier.fillMaxWidth())
-            }
-        }
     }
 }
 
