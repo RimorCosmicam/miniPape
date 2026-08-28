@@ -1,7 +1,6 @@
 package com.rimor.minipape
 
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -18,6 +17,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
@@ -48,6 +49,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -61,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -114,39 +117,36 @@ private fun GalleryScreen(viewModel: MiniPapeViewModel) {
             add(item.displayName to PreviewSession(source = item.file, mediaKind = item.mediaKind, recipe = item.recipe))
         }
     }
-    Column(Modifier.fillMaxSize()) {
-        PageHeading("Gallery", "Swipe to create")
-        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
-            val cardHeight = maxHeight - 8.dp
-            if (sessions.isEmpty()) {
-                EmptyGallery()
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(sessions, key = { it.first + (it.second.source?.absolutePath ?: "live") }) { (label, session) ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().height(cardHeight),
-                            shape = RoundedCornerShape(26.dp),
-                        ) {
-                            Box(Modifier.fillMaxSize()) {
-                                WallpaperSurface(session, Modifier.fillMaxSize())
-                                Surface(
-                                    modifier = Modifier.align(Alignment.TopStart).padding(10.dp),
-                                    color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.66f),
-                                    shape = RoundedCornerShape(15.dp),
-                                ) {
-                                    Text(
-                                        label,
-                                        color = MaterialTheme.colorScheme.inverseOnSurface,
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                                    )
-                                }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val cardHeight = maxHeight - 8.dp
+        if (sessions.isEmpty()) {
+            EmptyGallery()
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(sessions, key = { it.first + (it.second.source?.absolutePath ?: "live") }) { (label, session) ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth().height(cardHeight),
+                        shape = RoundedCornerShape(26.dp),
+                    ) {
+                        Box(Modifier.fillMaxSize()) {
+                            WallpaperSurface(session, Modifier.fillMaxSize())
+                            Surface(
+                                modifier = Modifier.align(Alignment.TopStart).padding(10.dp),
+                                color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.66f),
+                                shape = RoundedCornerShape(15.dp),
+                            ) {
+                                Text(
+                                    label,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                )
                             }
                         }
                     }
@@ -157,16 +157,18 @@ private fun GalleryScreen(viewModel: MiniPapeViewModel) {
 }
 
 @Composable
-private fun PageHeading(title: String, hint: String? = null, action: (@Composable () -> Unit)? = null) {
+private fun PageHeading(title: String, action: (@Composable () -> Unit)? = null) {
     Row(
         modifier = Modifier.fillMaxWidth().height(48.dp).padding(start = 14.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
         Spacer(Modifier.weight(1f))
-        if (hint != null) {
-            Text(hint, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
         action?.invoke()
     }
 }
@@ -199,7 +201,7 @@ private fun CreateScreen(viewModel: MiniPapeViewModel) {
         if (result.resultCode == Activity.RESULT_OK) selected = result.data?.data
     }
     val chooseMedia = {
-        picker.launch(mediaSourceChooser(context))
+        picker.launch(mediaSourceChooser())
     }
     val save: () -> Unit = {
         selected?.let {
@@ -219,6 +221,10 @@ private fun CreateScreen(viewModel: MiniPapeViewModel) {
                 modifier = Modifier.height(40.dp),
                 shape = RoundedCornerShape(16.dp),
                 contentPadding = PaddingValues(horizontal = 12.dp),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                ),
             ) {
                 Icon(Icons.Default.Devices, contentDescription = null, Modifier.size(18.dp))
                 Text(if (pairingOpen) "Done" else "Mac", modifier = Modifier.padding(start = 7.dp))
@@ -253,27 +259,12 @@ private fun CreateScreen(viewModel: MiniPapeViewModel) {
     }
 }
 
-private fun mediaSourceChooser(context: Context): Intent {
-    fun intentFor(action: String) = Intent(action).apply {
+private fun mediaSourceChooser(): Intent {
+    return Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
         addCategory(Intent.CATEGORY_OPENABLE)
         type = "*/*"
         putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
-    }
-
-    val candidates = listOf(Intent.ACTION_GET_CONTENT, Intent.ACTION_OPEN_DOCUMENT)
-        .flatMap { action ->
-            val base = intentFor(action)
-            context.packageManager.queryIntentActivities(base, 0).map { resolved ->
-                Intent(base).setClassName(resolved.activityInfo.packageName, resolved.activityInfo.name)
-            }
-        }
-        .distinctBy { it.component?.flattenToString() }
-
-    val primary = candidates.firstOrNull() ?: intentFor(Intent.ACTION_OPEN_DOCUMENT)
-    return Intent.createChooser(primary, "Choose wallpaper source").apply {
-        if (candidates.size > 1) {
-            putExtra(Intent.EXTRA_INITIAL_INTENTS, candidates.drop(1).toTypedArray())
-        }
+        putExtra(Intent.EXTRA_LOCAL_ONLY, false)
     }
 }
 
@@ -285,15 +276,68 @@ private fun CoverEditor(
     onVertical: (Float) -> Unit, onToggleFilter: (ThemeFilter) -> Unit,
     onPanel: (EditPanel) -> Unit, onSave: () -> Unit,
 ) {
-    Box(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp)) {
-        EditorCanvas(
-            selected, scale, horizontal, vertical, filters, onChoose,
-            Modifier.fillMaxSize(),
-        )
-
-        if (selected != null && panel == EditPanel.Crop) {
+    Row(
+        Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(Modifier.width(52.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
             Surface(
-                modifier = Modifier.align(Alignment.TopEnd).fillMaxWidth().padding(start = 58.dp).height(118.dp),
+                modifier = Modifier.width(52.dp).height(196.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    val plain = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)
+                    val filled = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    )
+                    IconButton(onClick = onChoose, modifier = Modifier.size(42.dp), colors = plain) {
+                        Icon(Icons.Default.Add, contentDescription = "Choose image or video")
+                    }
+                    if (panel == EditPanel.Crop) {
+                        FilledIconButton(onClick = { onPanel(EditPanel.Crop) }, modifier = Modifier.size(42.dp), colors = filled) {
+                            Icon(Icons.Default.Crop, contentDescription = "Crop controls")
+                        }
+                    } else {
+                        IconButton(onClick = { onPanel(EditPanel.Crop) }, modifier = Modifier.size(42.dp), colors = plain) {
+                            Icon(Icons.Default.Crop, contentDescription = "Crop controls")
+                        }
+                    }
+                    if (panel == EditPanel.Filters) {
+                        FilledIconButton(onClick = { onPanel(EditPanel.Filters) }, modifier = Modifier.size(42.dp), colors = filled) {
+                            Icon(Icons.Default.Palette, contentDescription = "Filters, ${filters.size} selected")
+                        }
+                    } else {
+                        IconButton(onClick = { onPanel(EditPanel.Filters) }, modifier = Modifier.size(42.dp), colors = plain) {
+                            Icon(Icons.Default.Palette, contentDescription = "Filters, ${filters.size} selected")
+                        }
+                    }
+                    FilledIconButton(
+                        onClick = onSave,
+                        enabled = selected != null,
+                        modifier = Modifier.size(42.dp),
+                        colors = filled,
+                    ) {
+                        Icon(Icons.Default.Save, contentDescription = "Save wallpaper")
+                    }
+                }
+            }
+        }
+
+        Box(Modifier.weight(1f).fillMaxHeight()) {
+            EditorCanvas(
+                selected, scale, horizontal, vertical, filters, onChoose,
+                Modifier.fillMaxSize(),
+            )
+
+            if (selected != null && panel == EditPanel.Crop) {
+                Surface(
+                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(118.dp),
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f),
             ) {
@@ -305,9 +349,9 @@ private fun CoverEditor(
             }
         }
 
-        if (selected != null && panel == EditPanel.Filters) {
-            Surface(
-                modifier = Modifier.align(Alignment.TopEnd).fillMaxWidth().padding(start = 58.dp).height(66.dp),
+            if (selected != null && panel == EditPanel.Filters) {
+                Surface(
+                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(66.dp),
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f),
             ) {
@@ -328,45 +372,6 @@ private fun CoverEditor(
             }
         }
 
-        Surface(
-            modifier = Modifier.align(Alignment.CenterStart).width(52.dp).height(196.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.98f),
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(vertical = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween,
-            ) {
-                IconButton(onClick = onChoose, modifier = Modifier.size(42.dp)) {
-                    Icon(Icons.Default.Add, contentDescription = "Choose media")
-                }
-                if (panel == EditPanel.Crop) {
-                    FilledIconButton(onClick = { onPanel(EditPanel.Crop) }, modifier = Modifier.size(42.dp)) {
-                        Icon(Icons.Default.Crop, contentDescription = "Crop controls")
-                    }
-                } else {
-                    IconButton(onClick = { onPanel(EditPanel.Crop) }, modifier = Modifier.size(42.dp)) {
-                        Icon(Icons.Default.Crop, contentDescription = "Crop controls")
-                    }
-                }
-                if (panel == EditPanel.Filters) {
-                    FilledIconButton(onClick = { onPanel(EditPanel.Filters) }, modifier = Modifier.size(42.dp)) {
-                        Icon(Icons.Default.Palette, contentDescription = "Filters, ${filters.size} selected")
-                    }
-                } else {
-                    IconButton(onClick = { onPanel(EditPanel.Filters) }, modifier = Modifier.size(42.dp)) {
-                        Icon(Icons.Default.Palette, contentDescription = "Filters, ${filters.size} selected")
-                    }
-                }
-                FilledIconButton(
-                    onClick = onSave,
-                    enabled = selected != null,
-                    modifier = Modifier.size(42.dp),
-                ) {
-                    Icon(Icons.Default.Save, contentDescription = "Save wallpaper")
-                }
-            }
         }
     }
 }
@@ -412,7 +417,14 @@ private fun EditorCanvas(
     Surface(modifier = modifier, shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerHighest) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             if (selected == null) {
-                FilledTonalButton(onClick = onChoose, shape = RoundedCornerShape(18.dp)) {
+                FilledTonalButton(
+                    onClick = onChoose,
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                ) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Text("Choose", modifier = Modifier.padding(start = 8.dp))
                 }
