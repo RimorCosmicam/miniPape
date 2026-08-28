@@ -1,26 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/cover_widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#101114">
+    android:background="#080A12"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="20dp">
+
     <ImageView
-        android:id="@+id/cover_preview"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:contentDescription="miniPape preview"
-        android:scaleType="centerCrop" />
+        android:layout_width="112dp"
+        android:layout_height="112dp"
+        android:contentDescription="miniPape"
+        android:scaleType="centerCrop"
+        android:src="@drawable/minipape_brand" />
+
     <TextView
-        android:id="@+id/cover_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|start"
-        android:layout_margin="20dp"
-        android:background="#99000000"
-        android:paddingHorizontal="12dp"
-        android:paddingVertical="8dp"
-        android:text="Open miniPape"
+        android:layout_marginTop="14dp"
+        android:text="miniPape"
         android:textColor="#FFFFFF"
-        android:textSize="14sp" />
-</FrameLayout>
+        android:textSize="22sp"
+        android:textStyle="bold" />
 
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Tap to open your cover wallpaper"
+        android:textColor="#B9C3E8"
+        android:textSize="13sp" />
+</LinearLayout>
