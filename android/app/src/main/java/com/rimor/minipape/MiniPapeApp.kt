@@ -104,11 +104,11 @@ fun MiniPapeApp(viewModel: MiniPapeViewModel = viewModel()) {
 @Composable
 private fun CompactHeader(destination: Destination, onDestinationChange: (Destination) -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 10.dp, vertical = 5.dp),
+        modifier = Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        ImageIcon(Modifier.size(42.dp))
+        ImageIcon(Modifier.size(38.dp))
         Text(
             "miniPape",
             style = MaterialTheme.typography.titleMedium,
@@ -123,11 +123,11 @@ private fun CompactHeader(destination: Destination, onDestinationChange: (Destin
                 Destination.Connect -> Icons.Default.Devices
             }
             if (destination == item) {
-                FilledIconButton(onClick = { onDestinationChange(item) }, modifier = Modifier.size(44.dp)) {
+                FilledIconButton(onClick = { onDestinationChange(item) }, modifier = Modifier.size(42.dp)) {
                     Icon(icon, contentDescription = item.label)
                 }
             } else {
-                IconButton(onClick = { onDestinationChange(item) }, modifier = Modifier.size(44.dp)) {
+                IconButton(onClick = { onDestinationChange(item) }, modifier = Modifier.size(42.dp)) {
                     Icon(icon, contentDescription = item.label)
                 }
             }
@@ -275,19 +275,91 @@ private fun CoverEditor(
     onVertical: (Float) -> Unit, onToggleFilter: (ThemeFilter) -> Unit,
     onPanel: (EditPanel) -> Unit, onSave: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxSize().padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
+    Box(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp)) {
         EditorCanvas(
             selected, scale, horizontal, vertical, filters, onChoose,
-            Modifier.weight(1.25f).fillMaxHeight(),
+            Modifier.fillMaxSize(),
         )
-        EditorControls(
-            selected != null, scale, horizontal, vertical, filters, panel,
-            onScale, onHorizontal, onVertical, onToggleFilter, onPanel, onSave,
-            Modifier.weight(0.9f).fillMaxHeight(),
-        )
+
+        if (selected != null && panel == EditPanel.Crop) {
+            Surface(
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 58.dp).fillMaxWidth().height(118.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f),
+            ) {
+                Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                    CoverSlider("Scale", scale, 1f..4f, onScale)
+                    CoverSlider("X", horizontal, -1f..1f, onHorizontal)
+                    CoverSlider("Y", vertical, -1f..1f, onVertical)
+                }
+            }
+        }
+
+        if (selected != null && panel == EditPanel.Filters) {
+            Surface(
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 58.dp).fillMaxWidth().height(66.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f),
+            ) {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    items(ThemeFilter.entries) { filter ->
+                        FilterChip(
+                            selected = filter in filters,
+                            onClick = { onToggleFilter(filter) },
+                            label = { Text(filter.label, maxLines = 1) },
+                            modifier = Modifier.height(44.dp),
+                        )
+                    }
+                }
+            }
+        }
+
+        Surface(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(52.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.98f),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                IconButton(onClick = onChoose, modifier = Modifier.size(42.dp)) {
+                    Icon(Icons.Default.Add, contentDescription = "Choose media")
+                }
+                FilterChip(
+                    selected = panel == EditPanel.Crop,
+                    onClick = { onPanel(EditPanel.Crop) },
+                    label = { Text("Crop") },
+                    modifier = Modifier.weight(1f).height(40.dp),
+                )
+                FilterChip(
+                    selected = panel == EditPanel.Filters,
+                    onClick = { onPanel(EditPanel.Filters) },
+                    label = { Text("FX ${filters.size}") },
+                    modifier = Modifier.weight(1f).height(40.dp),
+                )
+                Button(
+                    onClick = onSave,
+                    enabled = selected != null,
+                    modifier = Modifier.height(40.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp),
+                ) { Text("Save") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CoverSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, onValue: (Float) -> Unit) {
+    Row(Modifier.fillMaxWidth().height(34.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(44.dp))
+        Slider(value = value, onValueChange = onValue, valueRange = range, modifier = Modifier.weight(1f))
+        Text(String.format("%.1f", value), style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(28.dp))
     }
 }
 
@@ -425,18 +497,11 @@ private fun ConnectScreen(viewModel: MiniPapeViewModel) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val coverMode = maxHeight < 600.dp
         if (coverMode) {
-            Row(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(0.85f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    ImageIcon(Modifier.size(92.dp))
-                    Text("Mac receiver", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
-                    Text("Same Wi‑Fi. Local only.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                }
-                ConnectionDetails(address, viewModel.pairCode, Modifier.weight(1.15f))
-            }
+            ConnectionDetails(
+                address,
+                viewModel.pairCode,
+                Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 8.dp),
+            )
         } else {
             Column(
                 modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
