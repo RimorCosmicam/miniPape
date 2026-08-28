@@ -35,8 +35,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
@@ -173,7 +176,7 @@ private fun GalleryScreen(viewModel: MiniPapeViewModel) {
                         Box(Modifier.fillMaxSize()) {
                             WallpaperSurface(session, Modifier.fillMaxSize())
                             Surface(
-                                modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
+                                modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
                                 color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.68f),
                                 shape = RoundedCornerShape(16.dp),
                             ) {
@@ -283,7 +286,7 @@ private fun CoverEditor(
 
         if (selected != null && panel == EditPanel.Crop) {
             Surface(
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 58.dp).fillMaxWidth().height(118.dp),
+                modifier = Modifier.align(Alignment.TopEnd).fillMaxWidth().padding(start = 58.dp).height(118.dp),
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f),
             ) {
@@ -297,7 +300,7 @@ private fun CoverEditor(
 
         if (selected != null && panel == EditPanel.Filters) {
             Surface(
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 58.dp).fillMaxWidth().height(66.dp),
+                modifier = Modifier.align(Alignment.TopEnd).fillMaxWidth().padding(start = 58.dp).height(66.dp),
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.96f),
             ) {
@@ -319,36 +322,43 @@ private fun CoverEditor(
         }
 
         Surface(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(52.dp),
+            modifier = Modifier.align(Alignment.CenterStart).width(52.dp).height(196.dp),
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.98f),
         ) {
-            Row(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            Column(
+                modifier = Modifier.fillMaxSize().padding(vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 IconButton(onClick = onChoose, modifier = Modifier.size(42.dp)) {
                     Icon(Icons.Default.Add, contentDescription = "Choose media")
                 }
-                FilterChip(
-                    selected = panel == EditPanel.Crop,
-                    onClick = { onPanel(EditPanel.Crop) },
-                    label = { Text("Crop") },
-                    modifier = Modifier.weight(1f).height(40.dp),
-                )
-                FilterChip(
-                    selected = panel == EditPanel.Filters,
-                    onClick = { onPanel(EditPanel.Filters) },
-                    label = { Text("FX ${filters.size}") },
-                    modifier = Modifier.weight(1f).height(40.dp),
-                )
-                Button(
+                if (panel == EditPanel.Crop) {
+                    FilledIconButton(onClick = { onPanel(EditPanel.Crop) }, modifier = Modifier.size(42.dp)) {
+                        Icon(Icons.Default.Crop, contentDescription = "Crop controls")
+                    }
+                } else {
+                    IconButton(onClick = { onPanel(EditPanel.Crop) }, modifier = Modifier.size(42.dp)) {
+                        Icon(Icons.Default.Crop, contentDescription = "Crop controls")
+                    }
+                }
+                if (panel == EditPanel.Filters) {
+                    FilledIconButton(onClick = { onPanel(EditPanel.Filters) }, modifier = Modifier.size(42.dp)) {
+                        Icon(Icons.Default.Palette, contentDescription = "Filters, ${filters.size} selected")
+                    }
+                } else {
+                    IconButton(onClick = { onPanel(EditPanel.Filters) }, modifier = Modifier.size(42.dp)) {
+                        Icon(Icons.Default.Palette, contentDescription = "Filters, ${filters.size} selected")
+                    }
+                }
+                FilledIconButton(
                     onClick = onSave,
                     enabled = selected != null,
-                    modifier = Modifier.height(40.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp),
-                ) { Text("Save") }
+                    modifier = Modifier.size(42.dp),
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = "Save wallpaper")
+                }
             }
         }
     }
