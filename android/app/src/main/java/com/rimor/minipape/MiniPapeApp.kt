@@ -1,8 +1,9 @@
 package com.rimor.minipape
 
+import android.app.Activity
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
@@ -219,8 +220,17 @@ private fun CreateScreen(viewModel: MiniPapeViewModel) {
     var vertical by remember { mutableFloatStateOf(0f) }
     var filters by remember { mutableStateOf<List<ThemeFilter>>(emptyList()) }
     var panel by remember { mutableStateOf(EditPanel.Crop) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { selected = it }
-    val chooseMedia = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) selected = result.data?.data
+    }
+    val chooseMedia = {
+        val mediaIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
+        }
+        picker.launch(Intent.createChooser(mediaIntent, "Choose wallpaper source"))
+    }
     val save: () -> Unit = {
         selected?.let {
             viewModel.importFromPhone(
