@@ -218,7 +218,7 @@ private fun CreateScreen(viewModel: MiniPapeViewModel) {
     var panel by remember { mutableStateOf(EditPanel.Crop) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { selected = it }
     val chooseMedia = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }
-    val save = {
+    val save: () -> Unit = {
         selected?.let {
             viewModel.importFromPhone(
                 context,
@@ -226,6 +226,7 @@ private fun CreateScreen(viewModel: MiniPapeViewModel) {
                 CropRecipe(scale = scale, offsetX = horizontal, offsetY = vertical, filters = filters),
             )
         }
+        Unit
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
