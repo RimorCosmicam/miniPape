@@ -11,8 +11,8 @@ android {
         applicationId = "com.rimor.minipape"
         minSdk = 31
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.5.0"
+        versionCode = 10
+        versionName = "0.6.0"
     }
 
     buildFeatures {
@@ -25,6 +25,15 @@ android {
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"
+        }
+    }
+
+    buildTypes {
+        // Signed with the same key as debug so a release build is something you can actually
+        // install, rather than an unsigned artifact nobody can put on a phone.
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

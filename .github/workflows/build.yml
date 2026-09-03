@@ -27,7 +27,15 @@ jobs:
         run: gradle -p android :app:testDebugUnitTest
       - name: Build debug APK
         run: gradle -p android :app:assembleDebug
+      - name: Build release APK
+        run: gradle -p android :app:assembleRelease
+      - name: Name the release APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk miniPape.apk
       - uses: actions/upload-artifact@v6
         with:
           name: miniPape-android-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v6
+        with:
+          name: miniPape-apk
+          path: miniPape.apk
