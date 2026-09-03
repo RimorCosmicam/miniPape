@@ -1,9 +1,9 @@
 {
   "device": "Samsung Galaxy Z Flip 7",
-  "pixelWidth": 1048,
-  "pixelHeight": 948,
+  "pixelWidth": 948,
+  "pixelHeight": 1048,
   "refreshRates": [60, 120],
-  "aspectRatio": 1.1054852321,
+  "aspectRatio": 0.9045801527,
   "safeArea": {
     "top": 24,
     "left": 24,

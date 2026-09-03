@@ -1,25 +1,61 @@
+<img src="miniPape.png" width="88" alt="miniPape">
+
 # miniPape
 
-miniPape creates cover-screen wallpapers for the Samsung Galaxy Z Flip 7.
+Your folded phone, wearing something you chose.
 
-- **miniPape for Mac** — a native macOS 27 Liquid Glass cropper, timeline editor, live phone preview controller, and sender.
-- **miniPape for Android** — a native Material 3 Expressive receiver, wallpaper gallery, cover-screen preview, and on-device editor.
+miniPape makes wallpapers for the cover display of a Samsung Galaxy Z Flip, on
+the phone itself. Load a picture or a clip, frame it in a window shaped like the
+cover screen, and it cuts the media to fit — exactly what the window showed, no
+second crop later.
 
-Both editors share miniMate's 16-effect filter catalog. Filters are stored as an ordered, non-destructive stack in each wallpaper recipe and rendered during Mac and phone previews.
+Built for the Galaxy Z Flip 7 FlexWindow. It runs there and nowhere else.
 
-The canonical output canvas is **1048 × 948 pixels**. Mac-to-phone communication stays on the local network and uses a short pairing code. No cloud account is required.
+## What it does
 
-## Repository layout
+- **Load** — any still or clip on the phone. JPEG, PNG, WEBP, HEIC, AVIF, GIF,
+  MP4, MOV, M4V, WEBM.
+- **Frame** — drag the media around, pinch to zoom, or work the bars. The media
+  cannot be pushed off its own canvas: what covers the window at rest still
+  covers it at full travel, on both axes.
+- **Trim** — two selectors on a line, for choosing where a clip starts and ends.
+- **Loop** — on, and the GIF runs forever. Off, and it stops on its last frame.
+- **Chromatic aberration** — red pulled one way, blue the other, rippling down
+  the frame. Baked into the file, previewed live at the strength it will have.
+- **Save** — cut to 948 × 1048, still to PNG and motion to GIF, filed in
+  Pictures/miniPape and handed straight to whichever gallery you like.
 
-- `macOS/` — SwiftUI and AVFoundation application
-- `android/` — Kotlin and Jetpack Compose application
-- `shared/` — protocol and device-canvas specifications
-- `.github/workflows/` — CI-only builds for the Mac app and APK
+## The cut
 
-## Platform boundaries
+Stills are cropped and written whole. Motion is decoded frame by frame, trimmed,
+quantised to a palette built from the clip itself, and LZW-compressed into a
+GIF89a — written here rather than borrowed, and checked by decoding it back with
+an independent reader. Looping is the Netscape block; leaving it out is what
+makes a GIF rest on its last frame.
 
-Samsung publicly supports Flex Window widgets and launching an activity on cover display ID 1. Android's public `WallpaperManager` exposes system and lock wallpaper destinations, but no Samsung-specific cover-screen destination. miniPape therefore previews in its cover activity, saves finished wallpapers to its gallery, and hands installation to the public Samsung/system wallpaper flow.
+Installation is handed to the public Samsung wallpaper flow. Android exposes
+system and lock wallpaper destinations but no cover-screen one, so miniPape cuts
+the file, keeps it as its own cover preview, and lets the system do the rest.
 
-## Build policy
+## Mont
 
-Application binaries are built by GitHub Actions. Do not compile on the development Mac.
+The interface is [Mont](https://github.com/RimorCosmicam) — black, white, and one
+accent at a time. No rounded corners, no borders, no pills: a selected thing is
+simply the bright one. The typeface is a commercial face from Fontfabric — check
+your own licence before reusing the files in `res/font`.
+
+## Building
+
+Everything is built by GitHub Actions. Push to `main` and take the artifact from
+the run, or start the workflow by hand.
+
+```
+gh run download <run-id> -R RimorCosmicam/miniPape -n miniPape-android-debug
+```
+
+The workflow runs the unit tests before it builds, so a green run is one where
+the framing limits and the GIF writer both still hold.
+
+## Open source
+
+MIT. Do what you like with it (but let me know, I love cool stuff).

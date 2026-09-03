@@ -28,6 +28,9 @@ data class CropRecipe(
     val rotation: Float = 0f,
     val muted: Boolean = true,
     val loop: Boolean = true,
+    /** Where the cut starts and ends, as fractions of the source's own length. */
+    val trimStart: Float = 0f,
+    val trimEnd: Float = 1f,
     val filters: List<ThemeFilter> = emptyList(),
 )
 
@@ -35,8 +38,6 @@ data class PreviewSession(
     val source: File? = null,
     val mediaKind: String = "image",
     val recipe: CropRecipe = CropRecipe(),
-    val playhead: Double = 0.0,
-    val playing: Boolean = true,
 )
 
 data class WallpaperItem(
@@ -45,3 +46,12 @@ data class WallpaperItem(
     val mediaKind: String,
     val recipe: CropRecipe = CropRecipe(),
 )
+
+sealed interface SaveState {
+    data object Idle : SaveState
+    data object Working : SaveState
+
+    /** [shared] is the Pictures/miniPape copy, if it could be made — what a gallery can open. */
+    data class Saved(val shared: android.net.Uri?, val mimeType: String) : SaveState
+    data class Failed(val message: String) : SaveState
+}

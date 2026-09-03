@@ -9,53 +9,45 @@ import org.json.JSONArray
 
 class WallpaperRepository(context: Context) {
     private val wallpaperDirectory = File(context.filesDir, "wallpapers").apply { mkdirs() }
-    private val previewDirectory = File(context.cacheDir, "preview").apply { mkdirs() }
-    private val _preview = MutableStateFlow(PreviewSession())
-    private val _wallpapers = MutableStateFlow(loadWallpapers())
+    private val _preview = MutableStateFlow(latestWallpaper())
 
+    /** What the cover activity shows: the most recent cut, still there after a restart. */
     val preview = _preview.asStateFlow()
-    val wallpapers = _wallpapers.asStateFlow()
 
-    fun previewFile(extension: String): File = File(previewDirectory, "current.${extension.safeExtension()}")
+    /** Where finished cuts are kept. */
+    val outputDirectory: File get() = wallpaperDirectory
 
-    fun setPreviewSource(file: File, kind: String) {
-        previewDirectory.listFiles()?.filter { it != file }?.forEach(File::delete)
-        _preview.value = PreviewSession(source = file, mediaKind = kind)
-    }
-
-    fun updatePreview(recipe: CropRecipe, playhead: Double, playing: Boolean) {
-        _preview.value = _preview.value.copy(recipe = recipe, playhead = playhead, playing = playing)
-    }
-
-    fun wallpaperFile(name: String): File {
-        val clean = name.substringAfterLast('/').substringAfterLast('\\')
-            .replace(Regex("[^A-Za-z0-9._ -]"), "_")
-            .take(100)
-            .ifBlank { "wallpaper-${System.currentTimeMillis()}" }
-        return File(wallpaperDirectory, clean)
-    }
-
-    fun addWallpaper(file: File, kind: String, recipe: CropRecipe = CropRecipe()) {
+    /**
+     * Puts a finished cut on the cover. The file is already the size and shape of the canvas, so
+     * the only part of the recipe still worth carrying is whether it loops.
+     */
+    fun setCutWallpaper(file: File, kind: String, loop: Boolean) {
+        val recipe = CropRecipe(loop = loop)
         recipeFile(file).writeText(recipe.toJson().toString())
-        _wallpapers.value = listOf(WallpaperItem(file, file.nameWithoutExtension, kind, recipe)) + _wallpapers.value
+        _preview.value = PreviewSession(source = file, mediaKind = kind, recipe = recipe)
     }
 
-    private fun loadWallpapers(): List<WallpaperItem> = wallpaperDirectory.listFiles()
-        ?.filterNot { it.name.endsWith(".minipape.json") }
-        ?.sortedByDescending(File::lastModified)
-        ?.map { file ->
-            val recipe = recipeFile(file).takeIf(File::exists)?.readText()?.let { runCatching { JSONObject(it).toCropRecipe() }.getOrNull() }
-                ?: CropRecipe()
-            WallpaperItem(file, file.nameWithoutExtension, mediaKind(file.extension), recipe)
-        }
-        .orEmpty()
+    private fun latestWallpaper(): PreviewSession {
+        val file = wallpaperDirectory.listFiles()
+            ?.filterNot { it.name.endsWith(RECIPE_SUFFIX) }
+            ?.maxByOrNull(File::lastModified)
+            ?: return PreviewSession()
+        val recipe = recipeFile(file).takeIf(File::exists)?.readText()
+            ?.let { runCatching { JSONObject(it).toCropRecipe() }.getOrNull() }
+            ?: CropRecipe()
+        return PreviewSession(source = file, mediaKind = mediaKind(file.extension), recipe = recipe)
+    }
 
-    private fun recipeFile(file: File): File = File(file.parentFile, "${file.name}.minipape.json")
+    private fun recipeFile(file: File): File = File(file.parentFile, "${file.name}$RECIPE_SUFFIX")
 
     private fun mediaKind(extension: String): String = when (extension.lowercase()) {
         "mp4", "mov", "m4v", "webm" -> "video"
         "gif", "apng" -> "animatedImage"
         else -> "image"
+    }
+
+    private companion object {
+        const val RECIPE_SUFFIX = ".minipape.json"
     }
 }
 
@@ -66,6 +58,8 @@ fun JSONObject.toCropRecipe(): CropRecipe = CropRecipe(
     rotation = optDouble("rotation", 0.0).toFloat(),
     muted = optBoolean("muted", true),
     loop = optBoolean("loop", true),
+    trimStart = optDouble("trimStart", 0.0).toFloat(),
+    trimEnd = optDouble("trimEnd", 1.0).toFloat(),
     filters = optJSONArray("filters")?.let { values ->
         buildList {
             repeat(values.length()) { index ->
@@ -82,6 +76,6 @@ private fun CropRecipe.toJson(): JSONObject = JSONObject()
     .put("rotation", rotation)
     .put("muted", muted)
     .put("loop", loop)
+    .put("trimStart", trimStart)
+    .put("trimEnd", trimEnd)
     .put("filters", JSONArray(filters.map(ThemeFilter::name)))
-
-private fun String.safeExtension(): String = lowercase().filter(Char::isLetterOrDigit).take(8).ifBlank { "bin" }

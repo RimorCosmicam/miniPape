@@ -1,638 +1,580 @@
 package com.rimor.minipape
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Crop
-import androidx.compose.material.icons.filled.Devices
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import java.net.Inet4Address
-import java.net.NetworkInterface
 
-private enum class EditPanel { Crop, Filters }
+private enum class Stage { Onboarding, Load, Frame, Finish }
 
-@Composable
-fun MiniPapeApp(viewModel: MiniPapeViewModel = viewModel()) {
-    val pager = rememberPagerState(initialPage = 0, pageCount = { 2 })
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
-            .windowInsetsPadding(
-                WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
-            )
-    ) {
-        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
-            when (page) {
-                0 -> GalleryScreen(viewModel)
-                else -> CreateScreen(viewModel)
-            }
+/** The share of the framing screen's width the window takes, leaving the rest for the pile. */
+private const val FRAME_SHARE = 0.56f
+
+/**
+ * What the editor is holding. Kept in one object so gesture handlers always read live values,
+ * and so the travel limits sit next to the numbers they constrain.
+ */
+private class EditorState {
+    var media by mutableStateOf<Uri?>(null)
+    var kind by mutableStateOf("")
+    var loop by mutableStateOf(true)
+    var chromatic by mutableStateOf(false)
+
+    /**
+     * Width over height of the source, taken from the painter that draws it — the same number
+     * ContentScale.Crop scales by, so the limits cannot disagree with what is on screen.
+     */
+    var aspect by mutableFloatStateOf(0f)
+        private set
+
+    var zoom by mutableFloatStateOf(1f)
+        private set
+    var horizontal by mutableFloatStateOf(0f)
+        private set
+    var vertical by mutableFloatStateOf(0f)
+        private set
+    var trimStart by mutableFloatStateOf(0f)
+        private set
+    var trimEnd by mutableFloatStateOf(1f)
+        private set
+
+    val isMotion: Boolean get() = kind.startsWith("video/") || kind == "image/gif"
+
+    val horizontalLimit: Float get() = CoverCanvas.horizontalLimit(aspect, zoom)
+    val verticalLimit: Float get() = CoverCanvas.verticalLimit(aspect, zoom)
+
+    fun load(uri: Uri, mimeType: String) {
+        media = uri
+        kind = mimeType
+        aspect = 0f
+        zoom = 1f
+        horizontal = 0f
+        vertical = 0f
+        trimStart = 0f
+        trimEnd = 1f
+        chromatic = false
+    }
+
+    fun measure(value: Float) {
+        if (value > 0f && value != aspect) {
+            aspect = value
+            settle()
         }
     }
-}
 
-@Composable
-private fun ImageIcon(modifier: Modifier = Modifier) {
-    androidx.compose.foundation.Image(
-        painter = painterResource(R.drawable.minipape_brand),
-        contentDescription = "miniPape",
-        modifier = modifier.clip(RoundedCornerShape(12.dp)),
-        contentScale = ContentScale.Crop,
+    fun zoomTo(value: Float) {
+        zoom = value.coerceIn(CoverCanvas.MIN_ZOOM, CoverCanvas.MAX_ZOOM)
+        settle()
+    }
+
+    fun panHorizontalTo(value: Float) {
+        horizontal = value
+        settle()
+    }
+
+    fun panVerticalTo(value: Float) {
+        vertical = value
+        settle()
+    }
+
+    fun pan(dx: Float, dy: Float) {
+        horizontal += dx
+        vertical += dy
+        settle()
+    }
+
+    fun trimTo(start: Float, end: Float) {
+        trimStart = start.coerceIn(0f, 1f - MIN_TRIM_SPAN)
+        trimEnd = end.coerceIn(trimStart + MIN_TRIM_SPAN, 1f)
+    }
+
+    /** Pulls the framing back inside its limits, so no edge of the media enters the window. */
+    private fun settle() {
+        horizontal = horizontal.coerceIn(-horizontalLimit, horizontalLimit)
+        vertical = vertical.coerceIn(-verticalLimit, verticalLimit)
+    }
+
+    fun recipe() = CropRecipe(
+        scale = zoom,
+        offsetX = horizontal,
+        offsetY = vertical,
+        loop = loop,
+        trimStart = trimStart,
+        trimEnd = trimEnd,
+        filters = if (chromatic) listOf(ThemeFilter.CHROMATIC) else emptyList(),
     )
 }
 
 @Composable
-private fun GalleryScreen(viewModel: MiniPapeViewModel) {
-    val wallpapers by viewModel.wallpapers.collectAsStateWithLifecycle()
-    val preview by viewModel.preview.collectAsStateWithLifecycle()
-    val sessions = buildList {
-        if (preview.source != null) add("Live from Mac" to preview)
-        wallpapers.forEach { item ->
-            add(item.displayName to PreviewSession(source = item.file, mediaKind = item.mediaKind, recipe = item.recipe))
-        }
-    }
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val cardHeight = maxHeight - 8.dp
-        if (sessions.isEmpty()) {
-            EmptyGallery()
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(sessions, key = { it.first + (it.second.source?.absolutePath ?: "live") }) { (label, session) ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth().height(cardHeight),
-                        shape = RoundedCornerShape(26.dp),
-                    ) {
-                        Box(Modifier.fillMaxSize()) {
-                            WallpaperSurface(session, Modifier.fillMaxSize())
-                            Surface(
-                                modifier = Modifier.align(Alignment.TopStart).padding(10.dp),
-                                color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.66f),
-                                shape = RoundedCornerShape(15.dp),
-                            ) {
-                                Text(
-                                    label,
-                                    color = Color.White,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EmptyGallery() {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(18.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        ImageIcon(Modifier.size(76.dp))
-        Text("No wallpapers yet", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 10.dp), color = Color.White)
-        Text("Swipe left to create one", color = Color.White.copy(alpha = 0.72f))
-    }
-}
-
-@Composable
-private fun CreateScreen(viewModel: MiniPapeViewModel) {
+fun MiniPapeApp(viewModel: MiniPapeViewModel = viewModel()) {
     val context = LocalContext.current
-    val address = remember { localAddress() }
-    var pairingOpen by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf<Uri?>(null) }
-    var scale by remember { mutableFloatStateOf(1f) }
-    var horizontal by remember { mutableFloatStateOf(0f) }
-    var vertical by remember { mutableFloatStateOf(0f) }
-    var filters by remember { mutableStateOf<List<ThemeFilter>>(emptyList()) }
-    var panel by remember { mutableStateOf(EditPanel.Crop) }
+    val editor = remember { EditorState() }
+    var stage by remember { mutableStateOf(if (onboarded(context)) Stage.Load else Stage.Onboarding) }
+    val save by viewModel.save.collectAsStateWithLifecycle()
+
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) selected = result.data?.data
-    }
-    val chooseMedia = {
-        picker.launch(mediaSourceChooser())
-    }
-    val save: () -> Unit = {
-        selected?.let {
-            viewModel.importFromPhone(
-                context,
-                it,
-                CropRecipe(scale = scale, offsetX = horizontal, offsetY = vertical, filters = filters),
-            )
+        val uri = result.data?.data
+        if (result.resultCode == Activity.RESULT_OK && uri != null) {
+            editor.load(uri, context.contentResolver.getType(uri).orEmpty())
+            viewModel.clearSave()
+            stage = Stage.Frame
         }
-        Unit
+    }
+    // Handing the cut to a gallery ends the job, so coming back from the chooser lands on
+    // loading rather than on an editor holding work that has already left.
+    val opener = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        viewModel.clearSave()
+        stage = Stage.Load
     }
 
-    if (pairingOpen) {
-        Column(Modifier.fillMaxSize()) {
-            ConnectionDetails(
-                address,
-                viewModel.pairCode,
-                Modifier.fillMaxWidth().weight(1f).padding(horizontal = 8.dp, vertical = 6.dp),
+    BackHandler(enabled = stage == Stage.Frame || stage == Stage.Finish) {
+        stage = if (stage == Stage.Finish) Stage.Frame else Stage.Load
+    }
+
+    // The ground runs edge to edge, including under the camera. Only the content holds off it.
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        when (stage) {
+            Stage.Onboarding -> OnboardingScreen {
+                markOnboarded(context)
+                stage = Stage.Load
+            }
+
+            Stage.Load -> LoadScreen(
+                onLoad = { picker.launch(mediaChooser()) },
+                onOnboarding = { stage = Stage.Onboarding },
             )
-            MacButton(
-                pairingOpen = true,
-                onClick = { pairingOpen = false },
-                modifier = Modifier.fillMaxWidth().height(54.dp),
+
+            Stage.Frame -> FrameScreen(
+                editor = editor,
+                onEdited = viewModel::clearSave,
+                onBack = { stage = Stage.Load },
+                onNext = { stage = Stage.Finish },
+            )
+
+            Stage.Finish -> FinishScreen(
+                editor = editor,
+                save = save,
+                onEdited = viewModel::clearSave,
+                onBack = { stage = Stage.Frame },
+                onSave = { editor.media?.let { viewModel.save(context, it, editor.recipe()) } },
+                onOpen = { uri, mimeType -> opener.launch(galleryChooser(uri, mimeType)) },
+                onDone = {
+                    viewModel.clearSave()
+                    stage = Stage.Load
+                },
             )
         }
-    } else {
-        BoxWithConstraints(Modifier.fillMaxSize()) {
-            val coverMode = maxHeight < 600.dp
-            if (coverMode) {
-                CoverEditor(
-                        selected, scale, horizontal, vertical, filters, panel, chooseMedia,
-                        { scale = it }, { horizontal = it }, { vertical = it },
-                        { filter -> filters = if (filter in filters) filters - filter else filters + filter },
-                        { panel = it }, save, { pairingOpen = true },
-                )
-            } else {
-                Column(Modifier.fillMaxSize()) {
-                    TallEditor(
-                        selected, scale, horizontal, vertical, filters, panel, chooseMedia,
-                        { scale = it }, { horizontal = it }, { vertical = it },
-                        { filter -> filters = if (filter in filters) filters - filter else filters + filter },
-                        { panel = it }, save,
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                    )
-                    MacButton(
-                        pairingOpen = false,
-                        onClick = { pairingOpen = true },
-                        modifier = Modifier.fillMaxWidth().height(54.dp),
-                    )
+    }
+}
+
+/**
+ * Everything readable holds off the system's unsafe edges — on the cover, the camera.
+ *
+ * Two things go wrong here and both have to be undone. The Flex Window dispatches no cutout to
+ * the window at all, so safeDrawing comes back empty and has to be replaced by asking the display
+ * itself. And the window is rendered larger than the panel and scaled down onto it — 1244x1375
+ * for a 948x1048 screen — while the cutout is reported in the panel's own pixels. Padding by the
+ * raw 220 therefore reserves only 167 real pixels for a 220 pixel camera, which is exactly how
+ * far a card ends up sitting over the lens.
+ */
+@Composable
+private fun Modifier.coverSafe(): Modifier {
+    val density = LocalDensity.current
+    val direction = LocalLayoutDirection.current
+    val view = LocalView.current
+    val container = LocalWindowInfo.current.containerSize
+    val cutout = remember(view) { view.display?.cutout }
+    val mode = remember(view) { view.display?.mode }
+
+    val across = mode?.physicalWidth?.takeIf { it > 0 }
+        ?.let { container.width.toFloat() / it } ?: 1f
+    val down = mode?.physicalHeight?.takeIf { it > 0 }
+        ?.let { container.height.toFloat() / it } ?: 1f
+
+    val safe = WindowInsets.safeDrawing
+    val left = maxOf(safe.getLeft(density, direction).toFloat(), (cutout?.safeInsetLeft ?: 0) * across)
+    val top = maxOf(safe.getTop(density).toFloat(), (cutout?.safeInsetTop ?: 0) * down)
+    val right = maxOf(safe.getRight(density, direction).toFloat(), (cutout?.safeInsetRight ?: 0) * across)
+    val bottom = maxOf(safe.getBottom(density).toFloat(), (cutout?.safeInsetBottom ?: 0) * down)
+    return with(density) { padding(left.toDp(), top.toDp(), right.toDp(), bottom.toDp()) }
+}
+
+/** The one card each screen is built from, filling the display it was given. */
+@Composable
+private fun FullCard(
+    arrangement: Arrangement.Vertical? = Arrangement.SpaceBetween,
+    spacing: Int = 10,
+    top: Int = 22,
+    bottom: Int = 16,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Box(Modifier.fillMaxSize()) {
+        MontStripes(Mont.Mustard, Modifier.fillMaxSize())
+        Column(Modifier.fillMaxSize().coverSafe().padding(vertical = 12.dp)) {
+            MontCard(
+                Modifier.weight(1f),
+                spacing = spacing.dp,
+                top = top.dp,
+                bottom = bottom.dp,
+                arrangement = arrangement,
+                content = content,
+            )
+        }
+    }
+}
+
+// --- onboarding --------------------------------------------------------------------------
+
+private class OnboardingPage(
+    val heading: String,
+    val lines: List<Pair<String, String>>,
+    val advance: String,
+)
+
+private val onboardingPages = listOf(
+    OnboardingPage(
+        heading = "The window",
+        lines = listOf(
+            "Drag" to "Move the media around",
+            "Pinch" to "Or pull the zoom bar",
+            "Bars" to "Nudge it left, right, up, down",
+        ),
+        advance = "Next",
+    ),
+    OnboardingPage(
+        heading = "The cut",
+        lines = listOf(
+            "Trim" to "Two selectors on a line",
+            "Loop off" to "It stops on the last frame",
+            "Save" to "Then open it in your gallery",
+        ),
+        advance = "Load media",
+    ),
+)
+
+@Composable
+private fun OnboardingScreen(onDone: () -> Unit) {
+    var step by remember { mutableIntStateOf(0) }
+    FullCard {
+        // The wordmark and the step belong together; only the way onward sits apart from them.
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            MontStackedWordmark(size = 40.sp)
+            // One card throughout: it exchanges what it holds and resizes to fit, rather than
+            // one screen vanishing and another taking its place.
+            AnimatedContent(
+                targetState = step,
+                transitionSpec = {
+                    (fadeIn(tween(240, delayMillis = 120)) togetherWith fadeOut(tween(140)))
+                        .using(SizeTransform(clip = false) { _, _ -> tween(360, easing = FastOutSlowInEasing) })
+                },
+                label = "OnboardingStep",
+            ) { index ->
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    MontCaption(onboardingPages[index].heading)
+                    onboardingPages[index].lines.forEach { (term, meaning) -> MontTermLine(term, meaning) }
                 }
             }
+        }
+        MontRow(
+            onboardingPages[step].advance,
+            onClick = { if (step == onboardingPages.lastIndex) onDone() else step++ },
+        )
+    }
+}
+
+// --- load --------------------------------------------------------------------------------
+
+@Composable
+private fun LoadScreen(onLoad: () -> Unit, onOnboarding: () -> Unit) {
+    FullCard(arrangement = null) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            MontStackedWordmark(size = 40.sp)
+            Spacer(Modifier.weight(1f))
+            MontWord("?", onClick = onOnboarding, bright = false)
+        }
+        // The screen exists to open one thing, so that is what fills it.
+        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+            MontAction("Load media", onClick = onLoad)
+        }
+    }
+}
+
+// --- framing -----------------------------------------------------------------------------
+
+@Composable
+private fun FrameScreen(
+    editor: EditorState,
+    onEdited: () -> Unit,
+    onBack: () -> Unit,
+    onNext: () -> Unit,
+) {
+    FullCard(arrangement = null, spacing = 9, top = 14, bottom = 12) {
+        Row(Modifier.fillMaxWidth().weight(1f)) {
+            EditorWindow(editor, Modifier.fillMaxWidth(FRAME_SHARE).fillMaxHeight())
+            Spacer(Modifier.width(12.dp))
+            // Movement and loop piled beside the window, where they are out of its way.
+            Column(
+                Modifier.weight(1f).fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    MontCaption("Horizontal")
+                    val limit = editor.horizontalLimit
+                    MontBar(
+                        editor.horizontal,
+                        -limit..limit,
+                        { onEdited(); editor.panHorizontalTo(it) },
+                        enabled = limit > 0f,
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    MontCaption("Vertical")
+                    val limit = editor.verticalLimit
+                    MontBar(
+                        editor.vertical,
+                        -limit..limit,
+                        { onEdited(); editor.panVerticalTo(it) },
+                        enabled = limit > 0f,
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("LOOP", style = Mont.row, color = Mont.Primary)
+                    Spacer(Modifier.width(10.dp))
+                    MontToggle(editor.loop, { onEdited(); editor.loop = it })
+                }
+            }
+        }
+
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+            Column(
+                Modifier.fillMaxWidth(FRAME_SHARE),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                MontCaption("Zoom")
+                MontBar(
+                    editor.zoom,
+                    CoverCanvas.MIN_ZOOM..CoverCanvas.MAX_ZOOM,
+                    { onEdited(); editor.zoomTo(it) },
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            MontWord("Back", onClick = onBack, bright = false)
+            Spacer(Modifier.width(14.dp))
+            MontWord("Next", onClick = onNext, enabled = editor.media != null)
+        }
+    }
+}
+
+// --- finishing ---------------------------------------------------------------------------
+
+@Composable
+private fun FinishScreen(
+    editor: EditorState,
+    save: SaveState,
+    onEdited: () -> Unit,
+    onBack: () -> Unit,
+    onSave: () -> Unit,
+    onOpen: (Uri, String) -> Unit,
+    onDone: () -> Unit,
+) {
+    FullCard(arrangement = null, spacing = 12, top = 14, bottom = 12) {
+        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+            EditorWindow(editor, Modifier.fillMaxHeight())
+        }
+
+        if (editor.isMotion) {
+            MontTrimBar(
+                editor.trimStart,
+                editor.trimEnd,
+                { start, end -> onEdited(); editor.trimTo(start, end) },
+            )
+        }
+
+        val saved = save as? SaveState.Saved
+        if (saved == null) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                MontPiledWord(
+                    "Chromatic",
+                    "Aberration",
+                    onClick = { onEdited(); editor.chromatic = !editor.chromatic },
+                    bright = editor.chromatic,
+                )
+                Spacer(Modifier.weight(1f))
+                MontWord("Back", onClick = onBack, bright = false)
+                Spacer(Modifier.width(14.dp))
+                MontWord(
+                    when (save) {
+                        SaveState.Working -> "Cutting"
+                        is SaveState.Failed -> "Retry"
+                        else -> "Save"
+                    },
+                    onClick = onSave,
+                    enabled = editor.media != null && save !is SaveState.Working,
+                )
+            }
+            if (save is SaveState.Failed) MontExplanation(save.message)
+        } else {
+            // Cut and filed. The list ends the way every Mont list ends: the way out first,
+            // then the thing you came for.
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                MontWord("Later", onClick = onDone, bright = false)
+                Spacer(Modifier.weight(1f))
+                MontWord(
+                    "Open",
+                    onClick = { saved.shared?.let { onOpen(it, saved.mimeType) } ?: onDone() },
+                )
+            }
+            MontExplanation("Saved to Pictures/miniPape")
+        }
+    }
+}
+
+// --- the window ---------------------------------------------------------------------------
+
+/** The cover's shape, as large as the space it is given allows. */
+@Composable
+private fun EditorWindow(editor: EditorState, modifier: Modifier) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        BoxWithConstraints {
+            val width = minOf(maxWidth, maxHeight * CoverCanvas.RATIO)
+            EditorFrame(editor, Modifier.width(width).height(width / CoverCanvas.RATIO))
         }
     }
 }
 
 @Composable
-private fun MacButton(pairingOpen: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun EditorFrame(editor: EditorState, modifier: Modifier) {
     Box(
-        modifier = modifier.padding(start = 12.dp, top = 4.dp, bottom = 6.dp),
-        contentAlignment = Alignment.CenterStart,
+        modifier
+            .background(Color.Black)
+            .clipToBounds()
+            .pointerInput(Unit) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    editor.zoomTo(editor.zoom * zoom)
+                    editor.pan(pan.x * 2f / size.width, pan.y * 2f / size.height)
+                }
+            },
     ) {
-        FilledTonalButton(
-            onClick = onClick,
-            modifier = Modifier.height(40.dp),
-            shape = RoundedCornerShape(16.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp),
-            colors = ButtonDefaults.filledTonalButtonColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = Color.White,
-            ),
-        ) {
-            Icon(Icons.Default.Devices, contentDescription = null, Modifier.size(18.dp), tint = Color.White)
-            Text(if (pairingOpen) "Done" else "Mac", modifier = Modifier.padding(start = 7.dp), color = Color.White)
-        }
-    }
-}
-
-private fun mediaSourceChooser(): Intent {
-    return Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-        addCategory(Intent.CATEGORY_OPENABLE)
-        type = "*/*"
-        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
-        putExtra(Intent.EXTRA_LOCAL_ONLY, false)
-    }
-}
-
-@Composable
-private fun CoverEditor(
-    selected: Uri?, scale: Float, horizontal: Float, vertical: Float,
-    filters: List<ThemeFilter>, panel: EditPanel,
-    onChoose: () -> Unit, onScale: (Float) -> Unit, onHorizontal: (Float) -> Unit,
-    onVertical: (Float) -> Unit, onToggleFilter: (ThemeFilter) -> Unit,
-    onPanel: (EditPanel) -> Unit, onSave: () -> Unit, onMac: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Column(
-            modifier = Modifier.width(64.dp).fillMaxHeight(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Surface(
-                modifier = Modifier.width(52.dp).height(196.dp),
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentColor = Color.White,
-            ) {
-                val plain = IconButtonDefaults.iconButtonColors(
-                    contentColor = Color.White,
-                    disabledContentColor = Color.White.copy(alpha = 0.45f),
+        val media = editor.media ?: return@Box
+        val transform = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                scaleX = editor.zoom
+                scaleY = editor.zoom
+                translationX = editor.horizontal * size.width * 0.5f
+                translationY = editor.vertical * size.height * 0.5f
+            }
+        ChromaticSurface(editor.chromatic, Modifier.fillMaxSize()) {
+            if (editor.kind.startsWith("video/")) {
+                VideoFrame(
+                    uri = media,
+                    loop = true,
+                    muted = true,
+                    playing = true,
+                    playheadSeconds = 0.0,
+                    modifier = transform,
+                    onAspect = editor::measure,
                 )
-                val filled = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White,
-                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    disabledContentColor = Color.White.copy(alpha = 0.45f),
-                )
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    IconButton(onClick = onChoose, modifier = Modifier.size(42.dp), colors = plain) {
-                        Icon(Icons.Default.Add, contentDescription = "Choose image or video", tint = Color.White)
-                    }
-                    if (panel == EditPanel.Crop) {
-                        FilledIconButton(onClick = { onPanel(EditPanel.Crop) }, modifier = Modifier.size(42.dp), colors = filled) {
-                            Icon(Icons.Default.Crop, contentDescription = "Crop controls", tint = Color.White)
-                        }
-                    } else {
-                        IconButton(onClick = { onPanel(EditPanel.Crop) }, modifier = Modifier.size(42.dp), colors = plain) {
-                            Icon(Icons.Default.Crop, contentDescription = "Crop controls", tint = Color.White)
-                        }
-                    }
-                    if (panel == EditPanel.Filters) {
-                        FilledIconButton(onClick = { onPanel(EditPanel.Filters) }, modifier = Modifier.size(42.dp), colors = filled) {
-                            Icon(Icons.Default.Palette, contentDescription = "Filters, ${filters.size} selected", tint = Color.White)
-                        }
-                    } else {
-                        IconButton(onClick = { onPanel(EditPanel.Filters) }, modifier = Modifier.size(42.dp), colors = plain) {
-                            Icon(Icons.Default.Palette, contentDescription = "Filters, ${filters.size} selected", tint = Color.White)
-                        }
-                    }
-                    FilledIconButton(
-                        onClick = onSave,
-                        enabled = selected != null,
-                        modifier = Modifier.size(42.dp),
-                        colors = filled,
-                    ) {
-                        Icon(Icons.Default.Save, contentDescription = "Save wallpaper", tint = Color.White)
-                    }
-                }
-            }
-            Spacer(Modifier.weight(1f))
-            FilledTonalButton(
-                onClick = onMac,
-                modifier = Modifier.width(64.dp).height(40.dp),
-                shape = RoundedCornerShape(15.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp),
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = Color.White,
-                ),
-            ) {
-                Text("Mac", color = Color.White, maxLines = 1)
-            }
-        }
-
-        Column(Modifier.weight(1f).fillMaxHeight()) {
-            if (selected != null && panel == EditPanel.Crop) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = Color.White,
-                ) {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
-                        CoverSlider("Scale", scale, 1f..4f, onScale)
-                        CoverSlider("X", horizontal, -1f..1f, onHorizontal)
-                        CoverSlider("Y", vertical, -1f..1f, onVertical)
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
-            }
-
-            if (selected != null && panel == EditPanel.Filters) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = Color.White,
-                ) {
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth().height(58.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        items(ThemeFilter.entries) { filter ->
-                            FilterChip(
-                                selected = filter in filters,
-                                onClick = { onToggleFilter(filter) },
-                                label = { Text(filter.label, maxLines = 1, color = Color.White) },
-                                modifier = Modifier.height(44.dp),
-                                colors = brightFilterChipColors(),
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
-            }
-
-            EditorCanvas(
-                selected, scale, horizontal, vertical, filters, onChoose,
-                Modifier.fillMaxWidth().weight(1f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun CoverSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, onValue: (Float) -> Unit) {
-    Row(Modifier.fillMaxWidth().height(29.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(42.dp), color = Color.White)
-        Slider(
-            value = value,
-            onValueChange = onValue,
-            valueRange = range,
-            modifier = Modifier.weight(1f),
-            colors = brightSliderColors(),
-        )
-        Text(
-            String.format("%.1f", value),
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.width(28.dp),
-            color = Color.White,
-        )
-    }
-}
-
-@Composable
-private fun brightSliderColors() = SliderDefaults.colors(
-    thumbColor = MaterialTheme.colorScheme.secondary,
-    activeTrackColor = MaterialTheme.colorScheme.secondary,
-    inactiveTrackColor = Color.White.copy(alpha = 0.28f),
-    activeTickColor = Color.White,
-    inactiveTickColor = Color.White.copy(alpha = 0.5f),
-)
-
-@Composable
-private fun brightFilterChipColors() = FilterChipDefaults.filterChipColors(
-    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-    labelColor = Color.White,
-    iconColor = Color.White,
-    selectedContainerColor = MaterialTheme.colorScheme.primary,
-    selectedLabelColor = Color.White,
-    selectedLeadingIconColor = Color.White,
-    selectedTrailingIconColor = Color.White,
-)
-
-@Composable
-private fun TallEditor(
-    selected: Uri?, scale: Float, horizontal: Float, vertical: Float,
-    filters: List<ThemeFilter>, panel: EditPanel,
-    onChoose: () -> Unit, onScale: (Float) -> Unit, onHorizontal: (Float) -> Unit,
-    onVertical: (Float) -> Unit, onToggleFilter: (ThemeFilter) -> Unit,
-    onPanel: (EditPanel) -> Unit, onSave: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        EditorCanvas(
-            selected, scale, horizontal, vertical, filters, onChoose,
-            Modifier.fillMaxWidth().weight(1f),
-        )
-        EditorControls(
-            selected != null, scale, horizontal, vertical, filters, panel,
-            onScale, onHorizontal, onVertical, onToggleFilter, onPanel, onSave,
-            Modifier.fillMaxWidth().height(300.dp),
-        )
-    }
-}
-
-@Composable
-private fun EditorCanvas(
-    selected: Uri?, scale: Float, horizontal: Float, vertical: Float,
-    filters: List<ThemeFilter>, onChoose: () -> Unit, modifier: Modifier,
-) {
-    Surface(modifier = modifier, shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerHighest) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            if (selected == null) {
-                FilledTonalButton(
-                    onClick = onChoose,
-                    shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = Color.White)
-                    Text("Choose", modifier = Modifier.padding(start = 8.dp), color = Color.White)
-                }
             } else {
-                ThemeFilterStack(filters, Modifier.fillMaxSize()) {
-                    coil3.compose.AsyncImage(
-                        model = selected,
-                        contentDescription = "Cover crop preview",
-                        modifier = Modifier.fillMaxSize().graphicsLayer {
-                            scaleX = scale
-                            scaleY = scale
-                            translationX = horizontal * size.width * 0.5f
-                            translationY = vertical * size.height * 0.5f
-                        },
-                        contentScale = ContentScale.Crop,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EditorControls(
-    hasMedia: Boolean, scale: Float, horizontal: Float, vertical: Float,
-    filters: List<ThemeFilter>, panel: EditPanel,
-    onScale: (Float) -> Unit, onHorizontal: (Float) -> Unit, onVertical: (Float) -> Unit,
-    onToggleFilter: (ThemeFilter) -> Unit, onPanel: (EditPanel) -> Unit,
-    onSave: () -> Unit, modifier: Modifier,
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        contentColor = Color.White,
-    ) {
-        Column(Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                FilterChip(
-                    selected = panel == EditPanel.Crop,
-                    onClick = { onPanel(EditPanel.Crop) },
-                    label = { Text("Crop", color = Color.White) },
-                    leadingIcon = { Icon(Icons.Default.Tune, contentDescription = null, Modifier.size(18.dp), tint = Color.White) },
-                    modifier = Modifier.weight(1f),
-                    colors = brightFilterChipColors(),
-                )
-                FilterChip(
-                    selected = panel == EditPanel.Filters,
-                    onClick = { onPanel(EditPanel.Filters) },
-                    label = { Text("FX ${filters.size}", color = Color.White) },
-                    modifier = Modifier.weight(1f),
-                    colors = brightFilterChipColors(),
-                )
-            }
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                if (panel == EditPanel.Crop) {
-                    Column(
-                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        CompactSlider("Scale", scale, 1f..4f, onScale)
-                        CompactSlider("Left / right", horizontal, -1f..1f, onHorizontal)
-                        CompactSlider("Up / down", vertical, -1f..1f, onVertical)
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(5.dp),
-                    ) {
-                        items(ThemeFilter.entries) { filter ->
-                            FilterChip(
-                                selected = filter in filters,
-                                onClick = { onToggleFilter(filter) },
-                                label = { Text(filter.label, maxLines = 1, color = Color.White) },
-                                modifier = Modifier.fillMaxWidth().height(42.dp),
-                                colors = brightFilterChipColors(),
-                            )
-                        }
+                val painter = coil3.compose.rememberAsyncImagePainter(model = media)
+                val intrinsic = painter.intrinsicSize
+                LaunchedEffect(intrinsic) {
+                    if (intrinsic.isSpecified && intrinsic.height > 0f) {
+                        editor.measure(intrinsic.width / intrinsic.height)
                     }
                 }
+                Image(
+                    painter = painter,
+                    contentDescription = null,
+                    modifier = transform,
+                    contentScale = ContentScale.Crop,
+                )
             }
-            Button(
-                onClick = onSave,
-                enabled = hasMedia,
-                modifier = Modifier.fillMaxWidth().height(46.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White,
-                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    disabledContentColor = Color.White.copy(alpha = 0.45f),
-                ),
-            ) { Text("Save", color = Color.White) }
         }
     }
 }
 
-@Composable
-private fun CompactSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, onValue: (Float) -> Unit) {
-    Column {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = Color.White)
-            Spacer(Modifier.weight(1f))
-            Text(String.format("%.2f", value), style = MaterialTheme.typography.labelSmall, color = Color.White)
-        }
-        Slider(
-            value = value,
-            onValueChange = onValue,
-            valueRange = range,
-            modifier = Modifier.fillMaxWidth().height(34.dp),
-            colors = brightSliderColors(),
-        )
-    }
+// --- plumbing ----------------------------------------------------------------------------
+
+private fun mediaChooser(): Intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+    addCategory(Intent.CATEGORY_OPENABLE)
+    type = "*/*"
+    putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
+    putExtra(Intent.EXTRA_LOCAL_ONLY, false)
 }
 
-@Composable
-private fun ConnectionDetails(address: String, pairCode: String, modifier: Modifier = Modifier) {
-    Surface(
-        modifier,
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        contentColor = Color.White,
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Wifi, contentDescription = null, Modifier.size(20.dp), tint = Color.White)
-                Text("Connect", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp), color = Color.White)
-            }
-            HorizontalDivider(color = Color.White.copy(alpha = 0.24f))
-            Text("ADDRESS", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
-            Text("$address:${ReceiverServer.PORT}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
-            Text("PAIR CODE", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f))
-            Text(pairCode.chunked(3).joinToString(" "), fontSize = 31.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold, color = Color.White)
-        }
-    }
+/** Whatever the phone has that can show a picture. */
+private fun galleryChooser(uri: Uri, mimeType: String): Intent {
+    val view = Intent(Intent.ACTION_VIEW)
+        .setDataAndType(uri, mimeType)
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    return Intent.createChooser(view, "Open in")
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 }
 
-private fun localAddress(): String = runCatching {
-    NetworkInterface.getNetworkInterfaces().toList()
-        .flatMap { it.inetAddresses.toList() }
-        .firstOrNull { it is Inet4Address && !it.isLoopbackAddress && it.isSiteLocalAddress }
-        ?.hostAddress ?: "Unavailable"
-}.getOrDefault("Unavailable")
+private const val PREFERENCES = "minipape"
+private const val ONBOARDED = "onboarded"
+
+private fun onboarded(context: Context): Boolean =
+    context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).getBoolean(ONBOARDED, false)
+
+private fun markOnboarded(context: Context) {
+    context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+        .edit()
+        .putBoolean(ONBOARDED, true)
+        .apply()
+}
