@@ -37,13 +37,6 @@ Installation is handed to the public Samsung wallpaper flow. Android exposes
 system and lock wallpaper destinations but no cover-screen one, so miniPape cuts
 the file, keeps it as its own cover preview, and lets the system do the rest.
 
-## Mont
-
-The interface is [Mont](https://github.com/RimorCosmicam) — black, white, and one
-accent at a time. No rounded corners, no borders, no pills: a selected thing is
-simply the bright one. The typeface is a commercial face from Fontfabric — check
-your own licence before reusing the files in `res/font`.
-
 ## Building
 
 Everything is built by GitHub Actions. Push to `main` and take the artifact from
