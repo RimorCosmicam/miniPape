@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -510,39 +511,54 @@ private fun EditorFrame(editor: EditorState, modifier: Modifier) {
             },
     ) {
         val media = editor.media ?: return@Box
-        val transform = Modifier
-            .fillMaxSize()
-            .graphicsLayer {
-                scaleX = editor.zoom
-                scaleY = editor.zoom
-                translationX = editor.horizontal * size.width * 0.5f
-                translationY = editor.vertical * size.height * 0.5f
-            }
-        ChromaticSurface(editor.chromatic, Modifier.fillMaxSize()) {
-            if (editor.kind.startsWith("video/")) {
-                VideoFrame(
-                    uri = media,
-                    loop = true,
-                    muted = true,
-                    playing = true,
-                    playheadSeconds = 0.0,
-                    modifier = transform,
-                    onAspect = editor::measure,
+        BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            // The media is laid out at the size that covers the window and centred over it, so
+            // the parts hanging outside are really there and can be brought in. Cropping it to
+            // the window instead throws them away, and then moving it only slides the crop and
+            // leaves the ground showing behind — which is precisely what it used to do.
+            val density = LocalDensity.current
+            val frameWidth = with(density) { maxWidth.toPx() }
+            val frameHeight = with(density) { maxHeight.toPx() }
+            // requiredSize, not size: size is coerced back into the parent's constraints, which
+            // would clamp the media to the window and crop away the very overflow being laid out.
+            val transform = Modifier
+                .requiredSize(
+                    maxWidth * CoverCanvas.coverX(editor.aspect),
+                    maxHeight * CoverCanvas.coverY(editor.aspect),
                 )
-            } else {
-                val painter = coil3.compose.rememberAsyncImagePainter(model = media)
-                val intrinsic = painter.intrinsicSize
-                LaunchedEffect(intrinsic) {
-                    if (intrinsic.isSpecified && intrinsic.height > 0f) {
-                        editor.measure(intrinsic.width / intrinsic.height)
-                    }
+                .graphicsLayer {
+                    scaleX = editor.zoom
+                    scaleY = editor.zoom
+                    // Offsets are a fraction of the window, not of the media laid over it.
+                    translationX = editor.horizontal * frameWidth * 0.5f
+                    translationY = editor.vertical * frameHeight * 0.5f
                 }
-                Image(
-                    painter = painter,
-                    contentDescription = null,
-                    modifier = transform,
-                    contentScale = ContentScale.Crop,
-                )
+            ChromaticSurface(editor.chromatic, Modifier.fillMaxSize()) {
+                if (editor.kind.startsWith("video/")) {
+                    VideoFrame(
+                        uri = media,
+                        loop = true,
+                        muted = true,
+                        playing = true,
+                        playheadSeconds = 0.0,
+                        modifier = transform,
+                        onAspect = editor::measure,
+                    )
+                } else {
+                    val painter = coil3.compose.rememberAsyncImagePainter(model = media)
+                    val intrinsic = painter.intrinsicSize
+                    LaunchedEffect(intrinsic) {
+                        if (intrinsic.isSpecified && intrinsic.height > 0f) {
+                            editor.measure(intrinsic.width / intrinsic.height)
+                        }
+                    }
+                    Image(
+                        painter = painter,
+                        contentDescription = null,
+                        modifier = transform,
+                        contentScale = ContentScale.Crop,
+                    )
+                }
             }
         }
     }
